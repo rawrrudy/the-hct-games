@@ -60,6 +60,21 @@ function isValidProgress(value: unknown): value is SavedProgress {
   });
 }
 
+function getIndiaDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value])
+  );
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 export default function WordlePage() {
   const [guesses, setGuesses] = useState<GuessFeedback[]>([]);
   const [current, setCurrent] = useState("");
@@ -69,7 +84,49 @@ export default function WordlePage() {
   const [loaded, setLoaded] = useState(false);
   const [dailyDate, setDailyDate] = useState("");
 
-  // Load today's saved game.
+  const shareResults = useCallback(async () => {
+    if (!finished || guesses.length === 0) return;
+
+    const won = guesses.some((guess) =>
+      guess.states.every((state) => state === "correct")
+    );
+
+    const score = won ? `${guesses.length}/6` : "X/6";
+
+    const grid = guesses
+      .map(({ states }) =>
+        states
+          .map((state) => {
+            if (state === "correct") return "🟩";
+            if (state === "present") return "🟨";
+            return "⬛";
+          })
+          .join("")
+      )
+      .join("\n");
+
+    const result = `The HCT Games Wordle ${dailyDate}\n${score}\n\n${grid}`;
+
+    try {
+      await navigator.clipboard.writeText(result);
+      setMessage("Results copied!");
+    } catch {
+      setMessage("Couldn't copy results. Try again.");
+    }
+  }, [finished, guesses, dailyDate]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const today = getIndiaDate();
+
+      if (dailyDate && today !== dailyDate) {
+        window.location.reload();
+      }
+    }, 15_000);
+
+    return () => window.clearInterval(interval);
+  }, [dailyDate]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -89,9 +146,8 @@ export default function WordlePage() {
 
         setDailyDate(data.date);
 
-        const saved = localStorage.getItem(
-          `hct-wordle-${data.date}`
-        );
+        const storageKey = `hct-wordle-${data.date}`;
+        const saved = localStorage.getItem(storageKey);
 
         if (saved) {
           try {
@@ -101,9 +157,11 @@ export default function WordlePage() {
               setGuesses(progress.guesses);
               setFinished(progress.finished);
               setMessage(progress.message);
+            } else {
+              localStorage.removeItem(storageKey);
             }
           } catch {
-            localStorage.removeItem(`hct-wordle-${data.date}`);
+            localStorage.removeItem(storageKey);
           }
         }
       } catch {
@@ -122,7 +180,7 @@ export default function WordlePage() {
     };
   }, []);
 
-  // Save progress whenever the game changes.
+
   useEffect(() => {
     if (!loaded || !dailyDate) return;
 
@@ -138,7 +196,7 @@ export default function WordlePage() {
         JSON.stringify(progress)
       );
     } catch {
-      // The game can continue if browser storage is unavailable.
+
     }
   }, [guesses, finished, message, loaded, dailyDate]);
 
@@ -381,9 +439,18 @@ export default function WordlePage() {
         </div>
 
         {finished && (
-          <p className="mt-6 text-sm text-[#D7DADC]">
-            Come back tomorrow for a new wordle :P
-          </p>
+          <div className="mt-6 flex flex-col items-center gap-4">
+            <p className="text-sm text-[#D7DADC]">
+              Come back tomorrow for a new puzzle :P
+            </p>
+
+            <button
+              onClick={() => void shareResults()}
+              className="rounded-full bg-[#538D4E] px-6 py-3 text-sm font-bold text-white hover:bg-[#467A42]"
+            >
+              Share results
+            </button>
+          </div>
         )}
       </section>
     </main>
