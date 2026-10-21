@@ -1,39 +1,21 @@
+
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
 
-const ANSWER = "LIGHT";
-const WORDS = [
-  "LIGHT", "APPLE", "BRAIN", "CHAIR", "DREAM",
-  "FLAME", "GRAPE", "HOUSE", "MUSIC", "PLANT",
-  "QUIET", "SMILE", "STONE", "TRAIN", "WATER",
-  "CRANE", "SLATE", "TRACE", "STARE", "CLOUD",
-];
-
 type TileState = "correct" | "present" | "absent" | "empty";
+type GuessResult = Exclude<TileState, "empty">;
 
-function evaluateGuess(guess: string, answer: string): TileState[] {
-  const states: TileState[] = Array(5).fill("absent");
-  const remaining = answer.split("");
+type GuessFeedback = {
+  word: string;
+  states: GuessResult[];
+};
 
-  for (let i = 0; i < 5; i++) {
-    if (guess[i] === answer[i]) {
-      states[i] = "correct";
-      remaining[i] = "";
-    }
-  }
-
-  for (let i = 0; i < 5; i++) {
-    if (states[i] === "correct") continue;
-    const index = remaining.indexOf(guess[i]);
-    if (index !== -1) {
-      states[i] = "present";
-      remaining[index] = "";
-    }
-  }
-
-  return states;
-}
+type SavedProgress = {
+  guesses: GuessFeedback[];
+  finished: boolean;
+  message: string;
+};
 
 const tileColors: Record<TileState, string> = {
   empty: "border-[#3A3A3C] bg-transparent",
@@ -48,14 +30,120 @@ const keyboardRows = [
   ["ENTER", "Z", "X", "C", "V", "B", "N", "M", "BACKSPACE"],
 ];
 
+function isValidProgress(value: unknown): value is SavedProgress {
+  if (!value || typeof value !== "object") return false;
+
+  const progress = value as Partial<SavedProgress>;
+
+  if (
+    !Array.isArray(progress.guesses) ||
+    progress.guesses.length > 6 ||
+    typeof progress.finished !== "boolean" ||
+    typeof progress.message !== "string"
+  ) {
+    return false;
+  }
+
+  return progress.guesses.every((guess) => {
+    if (!guess || typeof guess.word !== "string") return false;
+    if (!/^[A-Z]{5}$/.test(guess.word)) return false;
+    if (!Array.isArray(guess.states) || guess.states.length !== 5) {
+      return false;
+    }
+
+    return guess.states.every(
+      (state) =>
+        state === "correct" ||
+        state === "present" ||
+        state === "absent"
+    );
+  });
+}
+
 export default function WordlePage() {
-  const [guesses, setGuesses] = useState<string[]>([]);
+  const [guesses, setGuesses] = useState<GuessFeedback[]>([]);
   const [current, setCurrent] = useState("");
   const [message, setMessage] = useState("");
   const [finished, setFinished] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [dailyDate, setDailyDate] = useState("");
+
+  // Load today's saved game.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProgress() {
+      try {
+        const response = await fetch("/api/daily-word", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error("Could not load today's puzzle");
+        }
+
+        const data: { date: string } = await response.json();
+
+        if (cancelled) return;
+
+        setDailyDate(data.date);
+
+        const saved = localStorage.getItem(
+          `hct-wordle-${data.date}`
+        );
+
+        if (saved) {
+          try {
+            const progress: unknown = JSON.parse(saved);
+
+            if (isValidProgress(progress)) {
+              setGuesses(progress.guesses);
+              setFinished(progress.finished);
+              setMessage(progress.message);
+            }
+          } catch {
+            localStorage.removeItem(`hct-wordle-${data.date}`);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setMessage("Couldn't load today's puzzle. Refresh to retry.");
+        }
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    }
+
+    void loadProgress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Save progress whenever the game changes.
+  useEffect(() => {
+    if (!loaded || !dailyDate) return;
+
+    const progress: SavedProgress = {
+      guesses,
+      finished,
+      message,
+    };
+
+    try {
+      localStorage.setItem(
+        `hct-wordle-${dailyDate}`,
+        JSON.stringify(progress)
+      );
+    } catch {
+      // The game can continue if browser storage is unavailable.
+    }
+  }, [guesses, finished, message, loaded, dailyDate]);
 
   const submitGuess = useCallback(async () => {
-    if (finished) return;
+    if (!loaded || finished || checking) return;
 
     if (current.length !== 5) {
       setMessage("Not enough letters");
@@ -63,6 +151,9 @@ export default function WordlePage() {
     }
 
     const guess = current;
+
+    setChecking(true);
+    setMessage("");
 
     try {
       const response = await fetch("/api/check-word", {
@@ -78,47 +169,80 @@ export default function WordlePage() {
         return;
       }
 
-      const data: { valid: boolean } = await response.json();
+      const data: {
+        valid: boolean;
+        states?: GuessResult[];
+        won?: boolean;
+        answer?: string;
+      } = await response.json();
 
-      if (!data.valid) {
-        setMessage("Not in the word list.");
+      if (
+        !data.valid ||
+        !data.states ||
+        data.states.length !== 5 ||
+        !data.states.every(
+          (state) =>
+            state === "correct" ||
+            state === "present" ||
+            state === "absent"
+        )
+      ) {
+        setMessage("Not in word list");
         return;
       }
 
-      const next = [...guesses, guess];
+      const next: GuessFeedback[] = [
+        ...guesses,
+        { word: guess, states: data.states },
+      ];
 
       setGuesses(next);
       setCurrent("");
-      setMessage("");
 
-      if (guess === ANSWER) {
+      if (data.won) {
         setFinished(true);
         setMessage("Splendid!");
       } else if (next.length === 6) {
         setFinished(true);
-        setMessage(`The word ws ${ANSWER}`);
+        setMessage(`The word was ${data.answer ?? "unknown"}`);
+      } else {
+        setMessage("");
       }
     } catch {
       setMessage("Couldn't check word. Try again.");
+    } finally {
+      setChecking(false);
     }
-  }, [current, finished, guesses]);
+  }, [current, finished, checking, loaded, guesses]);
 
-  const handleKey = useCallback((key: string) => {
-    if (finished) return;
+  const handleKey = useCallback(
+    (key: string) => {
+      if (!loaded || finished || checking) return;
 
-    if (key === "ENTER") {
-      submitGuess();
-    } else if (key === "BACKSPACE") {
-      setCurrent((value) => value.slice(0, -1));
-      setMessage("");
-    } else if (/^[A-Z]$/.test(key) && current.length < 5) {
-      setCurrent((value) => value + key);
-      setMessage("");
-    }
-  }, [current, finished, submitGuess]);
+      if (key === "ENTER") {
+        void submitGuess();
+      } else if (key === "BACKSPACE") {
+        setCurrent((value) => value.slice(0, -1));
+        setMessage("");
+      } else if (/^[A-Z]$/.test(key) && current.length < 5) {
+        setCurrent((value) => value + key);
+        setMessage("");
+      }
+    },
+    [current, finished, checking, loaded, submitGuess]
+  );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.repeat
+      ) {
+        return;
+      }
+
       if (/^[a-zA-Z]$/.test(event.key)) {
         handleKey(event.key.toUpperCase());
       } else if (event.key === "Enter") {
@@ -129,14 +253,17 @@ export default function WordlePage() {
     }
 
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [handleKey]);
 
   const keyboardStates: Record<string, TileState> = {};
 
-  guesses.forEach((guess) => {
-    evaluateGuess(guess, ANSWER).forEach((state, index) => {
-      const letter = guess[index];
+  guesses.forEach(({ word, states }) => {
+    states.forEach((state, index) => {
+      const letter = word[index];
       const previous = keyboardStates[letter];
 
       if (
@@ -155,15 +282,19 @@ export default function WordlePage() {
         <a href="/" className="text-sm text-[#D7DADC] hover:text-white">
           ← All games
         </a>
+
         <h1 className="text-2xl font-bold tracking-tight">Wordle</h1>
+
         <button
           onClick={() => {
-            setGuesses([]);
-            setCurrent("");
-            setMessage("");
-            setFinished(false);
+            setMessage(
+              finished
+                ? message
+                : "Your daily puzzle can't be restarted."
+            );
           }}
-          className="text-sm text-[#D7DADC] hover:text-white"
+          disabled={!loaded || checking}
+          className="text-sm text-[#D7DADC] hover:text-white disabled:opacity-50"
         >
           Restart
         </button>
@@ -172,27 +303,27 @@ export default function WordlePage() {
       <section className="mx-auto flex max-w-lg flex-col items-center px-3 pb-6 pt-6">
         <div className="grid w-full max-w-[350px] grid-cols-5 gap-[5px]">
           {Array.from({ length: 6 }).map((_, row) => {
-            const guess = guesses[row];
+            const submitted = guesses[row];
             const letters =
-              guess ?? (row === guesses.length ? current : "");
-            const states = guess
-              ? evaluateGuess(guess, ANSWER)
-              : [];
+              submitted?.word ??
+              (row === guesses.length && !finished ? current : "");
 
             return Array.from({ length: 5 }).map((_, col) => {
               const letter = letters[col] ?? "";
-              const state = guess ? states[col] : "empty";
+              const state: TileState = submitted
+                ? submitted.states[col]
+                : "empty";
 
               return (
                 <div
-                  key={`${row}-${col}-${guesses.length}`}
+                  key={`${row}-${col}`}
                   className={`flex aspect-square items-center justify-center border-2 text-2xl font-bold uppercase sm:text-3xl ${tileColors[state]} ${
-                    guess && row === guesses.length - 1
+                    submitted && row === guesses.length - 1
                       ? "hct-tile-flip"
                       : ""
                   }`}
                   style={
-                    guess && row === guesses.length - 1
+                    submitted && row === guesses.length - 1
                       ? { animationDelay: `${col * 180}ms` }
                       : undefined
                   }
@@ -204,7 +335,10 @@ export default function WordlePage() {
           })}
         </div>
 
-        <p aria-live="polite" className="mt-4 h-6 text-center text-sm font-semibold">
+        <p
+          aria-live="polite"
+          className="mt-4 h-6 text-center text-sm font-semibold"
+        >
           {message}
         </p>
 
@@ -212,15 +346,18 @@ export default function WordlePage() {
           {keyboardRows.map((row, rowIndex) => (
             <div key={rowIndex} className="flex justify-center gap-1.5">
               {row.map((key) => {
-                const special = key === "ENTER" || key === "BACKSPACE";
+                const special =
+                  key === "ENTER" || key === "BACKSPACE";
                 const state = keyboardStates[key];
 
                 return (
                   <button
                     key={key}
                     onClick={() => handleKey(key)}
-                    disabled={finished}
-                    aria-label={key === "BACKSPACE" ? "Backspace" : key}
+                    disabled={!loaded || finished || checking}
+                    aria-label={
+                      key === "BACKSPACE" ? "Backspace" : key
+                    }
                     className={`h-[58px] rounded-[4px] text-sm font-bold transition-colors disabled:cursor-default ${
                       special
                         ? "px-2 text-[10px] sm:px-3 sm:text-xs"
@@ -244,17 +381,9 @@ export default function WordlePage() {
         </div>
 
         {finished && (
-          <button
-            onClick={() => {
-              setGuesses([]);
-              setCurrent("");
-              setMessage("");
-              setFinished(false);
-            }}
-            className="mt-6 rounded-full bg-white px-6 py-3 text-sm font-bold text-black hover:bg-gray-200"
-          >
-            Play again
-          </button>
+          <p className="mt-6 text-sm text-[#D7DADC]">
+            Come back tomorrow for a new wordle :P
+          </p>
         )}
       </section>
     </main>

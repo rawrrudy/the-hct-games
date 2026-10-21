@@ -27,7 +27,7 @@ function evaluateGuess(guess: string, answer: string): TileState[] {
 
   for (let i = 0; i < 5; i++) {
     if (guess[i] === answer[i]) {
-      states[i] === "correct";
+      states[i] = "correct";
       remaining[i] = "";
     }
   }
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
       valid: true,
       states,
       won: guess === answer,
+      answer,
     });
   } catch {
     return NextResponse.json(
