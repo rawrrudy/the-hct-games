@@ -1,69 +1,111 @@
-import Image from "next/image";
+const games = [
+  {
+    number: "01",
+    name: "Wordle",
+    description: "Guess the 5-letter word with 6 chances.",
+    color: "bg-[#E9E7DC]",
+  },
+  {
+    number: "02",
+    name: "Connections",
+    description: "Group words that share a common thread.",
+    color: "bg-[#E5E8DF]",
+  },
+  {
+    number: "03",
+    name: "Strands",
+    description: "Uncover hidden words and reveal the theme.",
+    color: "bg-[#E9E2E8]",
+  },
+  {
+    number: "04",
+    name: "Spelling Bee",
+    description: "How many words can you make with 7 letters?",
+    color: "bg-[#E6E8ED]",
+  },
+  {
+    number: "05",
+    name: "The Crossword",
+    description: "Get clued in with wordplay every day.",
+    color: "bg-[#E9E5DC]",
+  },
+  {
+    number: "06",
+    name: "The Mini Crossword",
+    description: "Take a break from the news. Solve this bite-sized puzzle in just a few minutes.",
+    color: "bg-[#E4E9E6]",
+  },
+  {
+    number: "07",
+    name: "Pips",
+    description: "Place every domino in the right spot.",
+    color: "bg-[#E9E2E8]",
+  },
+  {
+    number: "08",
+    name: "Letter Boxed",
+    description: "Create words using letters around the square.",
+    color: "bg-[#E5E8DF]",
+  },
+  {
+    number: "09",
+    name: "Tiles",
+    description: "Match tiles to keep your chain going.",
+    color: "bg-[#E6E8ED]",
+  },
+  {
+    number: "10",
+    name: "Sudoku",
+    description: "Try this number game, minus the math.",
+    color: "bg-[#E9E7DC]",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
+    <main className="min-h-screen bg-[#FAF9F6] text-[#24241F]">
+      <header className="mx-auto flex max-w-6xl items-center justify-between border-b border-[#E8E5DE] px-6 py-6">
+        <a href = "/" className="text-2xl font-semibold tracking-tight">
+          The HCT Games<span className="text-[#A4A18F]"></span>
+        </a>
+        <span className="text-sm text-[#858276]">The Hack Club Times Games :D</span>
+      </header>
+
+      <section className="mx-auto max-w-6xl px-6 pb-20 pt-10">
+        <h1 className="mb-3 text-4xl font-medium tracking-tight sm:text-6xl">
+          Choose a game to play.
+        </h1>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {games.map((game) => (
             <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              key={game.number}
+              href={game.name === "Wordle" ? "/wordle" : "#"}
+              className="group block rounded-2xl border border-[#E8E5DE] bg-white p-5 transition duration-200 hover:-translate-y-1 hover:border-[#C8C3B7]"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              <div 
+                className={`mb-6 flex aspect-[2/1] items-center justify-center rounded-xl ${game.color}`}
+              >
+                <span className="text-sm tracking-[0.3em] text-[#77766F]">
+                  {game.number}
+                </span>
+              </div>
+
+              <h2 className="text-xl font-medium tracking-light">
+                {game.name}
+              </h2>
+
+              <p className="mt-2 text-sm leading-6 text-[#77766F]">
+                {game.description}
+              </p>
+            </a>
+          ))}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+        <footer className="mt-16 border-t border-[#E8E5DE] pt-6 text-sm text-[#858276]">
+          The HCT Games
+        </footer>
+      </section>
+    </main>
   );
 }
