@@ -1,38 +1,129 @@
+
 "use client";
 
-import { useState } from "react";
-import { PUZZLES } from "./puzzles";
+import { useEffect, useState } from "react";
 
-import type { PuzzleCategory } from "./puzzles";
-
-const CATEGORIES: PuzzleCategory[] = PUZZLES[0].groups;
-
-const INITIAL_WORDS = PUZZLES[0].groups.flatMap(
-  (group) => group.words
-);
-
-type SolvedGroup = PuzzleCategory;
-
-const DIFFICULTY_COLORS = {
-  yellow: { color: "#f9df6d", textColor: "#121212" },
-  green: { color: "#a0c35a", textColor: "#121212" },
-  blue: { color: "#b0c4ef", textColor: "#121212" },
-  purple: { color: "#ba81c5", textColor: "#121212" },
+type PuzzleCategory = {
+  name: string;
+  words: string[];
+  level: number;
 };
 
-export default function ConnectionsPage() {
-  const [words, setWords] = useState(() =>
-  [...INITIAL_WORDS].sort(() => Math.random() - 0.5)
-  );
-  const [selected, setSelected] = useState<string[]>([]);
-  const [solved, setSolved] = useState<SolvedGroup[]>([]);
-  const [mistakes, setMistakes] = useState(0);
-  const [message, setMessage] = useState("");
+type PuzzleResponse = {
+  id: number;
+  date: string;
+  groups: PuzzleCategory[];
+};
 
-  const gameOver = solved.length === CATEGORIES.length || mistakes >= 4;
+const LEVEL_COLORS = [
+  { color: "#f9df6d", textColor: "#121212" },
+  { color: "#a0c35a", textColor: "#121212" },
+  { color: "#b0c4ef", textColor: "#121212" },
+  { color: "#ba81c5", textColor: "#ffffff" },
+];
+
+function shuffle<T>(items: T[]): T[] {
+  const result = [...items];
+
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+
+  return result;
+}
+
+function getIndiaDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value])
+  );
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export default function ConnectionsPage() {
+  const [puzzle, setPuzzle] = useState<PuzzleResponse | null>(null);
+  const [words, setWords] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [solved, setSolved] = useState<PuzzleCategory[]>([]);
+  const [mistakes, setMistakes] = useState(0);
+  const [message, setMessage] = useState("Loading today's puzzle...");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPuzzle() {
+      setLoading(true);
+
+      try {
+        const response = await fetch("/api/connections", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error("Today's puzzle is unavailable.");
+        }
+
+        const data: PuzzleResponse = await response.json();
+
+        if (
+          !Array.isArray(data.groups) ||
+          data.groups.length !== 4 ||
+          data.groups.some(
+            (group) =>
+              !Array.isArray(group.words) ||
+              group.words.length !== 4
+          )
+        ) {
+          throw new Error("The puzzle data is invalid.");
+        }
+
+        const allWords = data.groups.flatMap((group) => group.words);
+
+        if (new Set(allWords).size !== 16) {
+          throw new Error("This puzzle contains duplicate words.");
+        }
+
+        if (!cancelled) {
+          setPuzzle(data);
+          setWords(shuffle(allWords));
+          setMessage("");
+        }
+      } catch {
+        if (!cancelled) {
+          setMessage(
+            "Couldn't load a puzzle. Please check your connection and try refreshing."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadPuzzle();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const gameOver =
+    solved.length === 4 || mistakes >= 4;
 
   function toggleWord(word: string) {
-    if (gameOver || solved.some((group) => group.words.includes(word))) {
+    if (
+      gameOver ||
+      loading ||
+      solved.some((group) => group.words.includes(word))
+    ) {
       return;
     }
 
@@ -43,34 +134,24 @@ export default function ConnectionsPage() {
         return current.filter((item) => item !== word);
       }
 
-      if (current.length === 4) return current;
+      if (current.length >= 4) return current;
 
       return [...current, word];
     });
   }
 
   function shuffleWords() {
-    if (gameOver) return;
-
-    setWords((current) => {
-      const shuffled = [...current];
-
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-
-      return shuffled;
-    });
+    if (gameOver || loading) return;
+    setWords((current) => shuffle(current));
   }
 
   function submitGuess() {
-    if (selected.length !== 4 || gameOver) return;
+    if (!puzzle || selected.length !== 4 || gameOver) return;
 
-    const category = CATEGORIES.find(
-      (item) =>
-        item.words.every((word) => selected.includes(word)) &&
-        selected.every((word) => item.words.includes(word))
+    const category = puzzle.groups.find(
+      (group) =>
+        group.words.every((word) => selected.includes(word)) &&
+        selected.every((word) => group.words.includes(word))
     );
 
     if (category) {
@@ -83,14 +164,12 @@ export default function ConnectionsPage() {
       return;
     }
 
-    const oneAway = CATEGORIES.some((item) => {
-      if (solved.includes(item)) return false;
+    const oneAway = puzzle.groups.some((group) => {
+      if (solved.includes(group)) return false;
 
-      const matches = selected.filter((word) =>
-        item.words.includes(word)
+      return (
+        selected.filter((word) => group.words.includes(word)).length === 3
       );
-
-      return matches.length === 3;
     });
 
     const nextMistakes = mistakes + 1;
@@ -107,62 +186,72 @@ export default function ConnectionsPage() {
   }
 
   function restartGame() {
-    setWords(INITIAL_WORDS);
+    if (!puzzle) return;
+
+    setWords(shuffle(puzzle.groups.flatMap((group) => group.words)));
     setSelected([]);
     setSolved([]);
     setMistakes(0);
     setMessage("");
   }
 
-  const shuffledSolved = [...solved].sort(
-    (a, b) => CATEGORIES.indexOf(a) - CATEGORIES.indexOf(b)
+  const sortedSolved = [...solved].sort(
+    (a, b) => a.level - b.level
   );
+
+  if (loading || !puzzle) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f8f8f6] px-6 text-center text-[#121212]">
+        <p className="max-w-md text-sm font-medium" aria-live="polite">
+          {message}
+        </p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f8f8f6] px-4 py-8 text-[#121212]">
       <div className="mx-auto w-full max-w-[520px]">
         <header className="mb-8 flex items-center justify-between border-b-2 border-black pb-4">
-          <a
-            href="/"
-            className="text-sm font-semibold hover:underline"
-          >
+          <a href="/" className="text-sm font-semibold hover:underline">
             ← HCT Games
           </a>
-
           <h1 className="text-xl font-extrabold tracking-tight">
             Connections
           </h1>
-
           <div className="w-[76px]" />
         </header>
 
         <section className="mb-6 text-center">
-          <h2 className="text-lg font-bold">
-            Create four groups of four!
-          </h2>
+          <h2 className="text-lg font-bold">Create four groups of four!</h2>
           <p className="mt-1 text-sm text-neutral-600">
             Find the connections between the words.
           </p>
         </section>
 
         <div className="mb-3 space-y-2">
-          {shuffledSolved.map((group) => (
-            <div
-              key={group.name}
-              className="flex min-h-[82px] flex-col items-center justify-center rounded-md px-3 py-3 text-center shadow-sm"
-              style={{
-                backgroundColor: DIFFICULTY_COLORS[group.difficulty].color,
-                color: DIFFICULTY_COLORS[group.difficulty].textColor,
-              }}
-            >
-              <p className="text-sm font-black tracking-wide">
-                {group.name}
-              </p>
-              <p className="mt-1 text-xs font-semibold">
-                {group.words.join(", ")}
-              </p>
-            </div>
-          ))}
+          {sortedSolved.map((group) => {
+            const colors =
+              LEVEL_COLORS[Math.min(Math.max(group.level, 0), 3)];
+
+            return (
+              <div
+                key={group.name}
+                className="flex min-h-[82px] flex-col items-center justify-center rounded-md px-3 py-3 text-center shadow-sm"
+                style={{
+                  backgroundColor: colors.color,
+                  color: colors.textColor,
+                }}
+              >
+                <p className="text-sm font-black tracking-wide">
+                  {group.name}
+                </p>
+                <p className="mt-1 text-xs font-semibold">
+                  {group.words.join(", ")}
+                </p>
+              </div>
+            );
+          })}
         </div>
 
         {words.length > 0 && (
@@ -176,22 +265,20 @@ export default function ConnectionsPage() {
                   type="button"
                   onClick={() => toggleWord(word)}
                   aria-pressed={isSelected}
-                  className={`flex aspect-square min-w-0 items-center justify-center rounded-md px-1 text-[10px] font-extrabold leading-tight tranisiton-colors sm:text-sm ${
+                  className={`flex aspect-square min-w-0 items-center justify-center rounded-md px-1 text-[10px] font-extrabold leading-tight transition-colors sm:text-sm ${
                     isSelected
                       ? "bg-[#5a594e] text-white"
                       : "bg-[#eae9e2] text-[#121212] hover:bg-[#deddd5]"
                   }`}
                 >
-                  <span className="break-words text-center">
-                    {word}
-                  </span>
+                  <span className="break-words text-center">{word}</span>
                 </button>
               );
             })}
           </div>
         )}
 
-        <div className="mt-5 text-center text-sm font-medium" aria-live="polite">
+        <div className="mt-5 min-h-6 text-center text-sm font-medium" aria-live="polite">
           {message || (gameOver ? "" : `${mistakes} / 4 mistakes`)}
         </div>
 
@@ -239,20 +326,25 @@ export default function ConnectionsPage() {
 
             {solved.length !== 4 && (
               <div className="mt-4 space-y-2">
-                {CATEGORIES.filter((category) => !solved.includes(category)).map(
-                  (category) => (
-                    <div
-                      key={category.name}
-                      className="rounded-md px-3 py-2 text-sm font-bold"
-                      style={{
-                        backgroundColor: DIFFICULTY_COLORS[category.difficulty].color,
-                        color: DIFFICULTY_COLORS[category.difficulty].textColor,
-                      }}
-                    >
-                      {category.name}: {category.words.join(", ")}
-                    </div>
-                  )
-                )}
+                {puzzle.groups
+                  .filter((group) => !solved.includes(group))
+                  .map((group) => {
+                    const colors =
+                      LEVEL_COLORS[Math.min(Math.max(group.level, 0), 3)];
+
+                    return (
+                      <div
+                        key={group.name}
+                        className="rounded-md px-3 py-2 text-sm font-bold"
+                        style={{
+                          backgroundColor: colors.color,
+                          color: colors.textColor,
+                        }}
+                      >
+                        {group.name}: {group.words.join(", ")}
+                      </div>
+                    );
+                  })}
               </div>
             )}
 
