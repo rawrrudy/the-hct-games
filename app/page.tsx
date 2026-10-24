@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 const games = [
   {
     number: "01",
@@ -64,16 +66,26 @@ const games = [
 export default function Home() {
   return (
     <main className="min-h-screen bg-[#FAF9F6] text-[#24241F]">
-      <header className="mx-auto flex max-w-6xl items-center justify-between border-b border-[#E8E5DE] px-6 py-6">
-        <a href = "/" className="text-2xl font-semibold tracking-tight">
-          The HCT Games<span className="text-[#A4A18F]"></span>
+      <header className="mx-auto flex max-w-6xl items-center justify-between border-b border-[#E8E5DE] px-6 py-4">
+        <a href="/" aria-label="The HCT Games homepage">
+          <Image
+            src="/The%20HCT%20Games.png"
+            alt="The HCT Games"
+            width={320}
+            height={160}
+            priority
+            className="h-40 w-auto object-contain sm:h-44"
+          />
         </a>
-        <span className="text-sm text-[#858276]">The Hack Club Times Games :D</span>
+
+        <span className="hidden text-sm text-[#858276] sm:block">
+          The Hack Club Times Games :D
+        </span>
       </header>
 
       <section className="mx-auto max-w-6xl px-6 pb-20 pt-10">
         <h1 className="mb-3 text-4xl font-medium tracking-tight sm:text-6xl">
-          Choose a game to play.
+          Choose a game to play :P
         </h1>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -91,7 +103,7 @@ export default function Home() {
                 </span>
               </div>
 
-              <h2 className="text-xl font-medium tracking-light">
+              <h2 className="text-xl font-medium tracking-tight">
                 {game.name}
               </h2>
 
