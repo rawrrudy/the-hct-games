@@ -6,18 +6,21 @@ const games = [
     name: "Wordle",
     description: "Guess the 5-letter word with 6 chances.",
     color: "bg-[#E9E7DC]",
+    icon: "/wordle.svg",
   },
   {
     number: "02",
     name: "Connections",
     description: "Group words that share a common thread.",
     color: "bg-[#E5E8DF]",
+    icon: "/connections.svg",
   },
   {
     number: "03",
     name: "Strands",
     description: "Uncover hidden words and reveal the theme.",
     color: "bg-[#E9E2E8]",
+    icon: "/strands.svg",
   },
   {
     number: "04",
@@ -98,9 +101,17 @@ export default function Home() {
               <div 
                 className={`mb-6 flex aspect-[2/1] items-center justify-center rounded-xl ${game.color}`}
               >
-                <span className="text-sm tracking-[0.3em] text-[#77766F]">
-                  {game.number}
-                </span>
+                {game.icon ? (
+                  <img
+                    src={game.icon}
+                    alt={`${game.name} icon`}
+                    className="h-32 w-32 object-contain transition-transform duration-200 group-hover:scale-105"
+                  />
+                ) : (
+                  <span className="text-sm tracking-[0.3em] text-[#77766F]">
+                    {game.number}
+                  </span>
+                )}
               </div>
 
               <h2 className="text-xl font-medium tracking-tight">
