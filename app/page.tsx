@@ -91,11 +91,31 @@ export default function Home() {
           Choose a game to play :P
         </h1>
 
+        <div className="mb-6 rounded-xl border border-[#E8E5DE] bg-[#F2F0E9] p-4 sm:p-5">
+          <p className="text-sm font-semibold text-[#24241F]">
+            A note to the reviewer!!!
+          </p>
+
+          <p className="mt-2 text-sm leading-6 text-[#77766F]">
+            So, currently on The HCT Games, Wordle, Connections and Strands are fully playable! The reminaing placeholders are still in development!
+            I'm submitting for review this early, as I have to get my invitation letter :P 
+            Thank you and hope you have fun!!!
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {games.map((game) => (
             <a
               key={game.number}
-              href={game.name === "Wordle" ? "/wordle" : "#"}
+              href={
+                game.name === "Wordle"
+                  ? "/wordle"
+                  : game.name === "Connections"
+                    ? "/connections"
+                    : game.name === "Strands"
+                      ? "/strands"
+                      : "#"
+              }
               className="group block rounded-2xl border border-[#E8E5DE] bg-white p-5 transition duration-200 hover:-translate-y-1 hover:border-[#C8C3B7]"
             >
               <div 
