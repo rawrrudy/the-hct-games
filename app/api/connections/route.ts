@@ -43,14 +43,16 @@ export async function GET(request: Request) {
 
     const requestedDate = url.searchParams.get("date") ?? today;
 
-    const puzzle = puzzles.find(
-      (item) => item.date === requestedDate
-    );
+    const puzzle =
+      puzzles.find((item) => item.date === requestedDate) ??
+      [...puzzles]
+        .filter((item) => item.date <= requestedDate)
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
 
     if (!puzzle) {
       return NextResponse.json(
         {
-          error: `No Connections puzzle is availalable for ${requestedDate}`,
+          error: `No Connections puzzle is available for ${requestedDate}`,
           requestedDate,
         },
         { status: 404 }
