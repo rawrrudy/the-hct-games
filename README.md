@@ -1,6 +1,6 @@
 # The HCT Games
 
-> Note: The HCT Games are currently in development! The fully playable  games are:
+> ⚠️ Note: The HCT Games are currently in development! The fully playable  games are:
 > 1. Wordle
 > 2. Connections
 > 3. Strands
@@ -23,4 +23,53 @@ So the main reason I thought of making this project was because the NYT Games ch
 ---
 
 ## Images
+
+<p align="center">
+  <img src="images/hctgames1.png" width="700">
+</p>
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="images/hctgames2.png" width="500">
+    </td>
+    <td align="center">
+      <img src="images/hctgames3.png" width="500">
+    </td>
+  </tr>
+</table>
+
+---
+
+## How to Build & Run
+
+Prerequisites: [Node.js](https://nodejs.org/) and npm.
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/rawrrudy/the-hct-games
+   cd lumen
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+Built with Next.js, TypeScript, and Tailwind CSS.
+
+---
+
+## License
+
+This project has the MIT License
+
+
 
