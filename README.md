@@ -69,7 +69,7 @@ Built with Next.js, TypeScript, and Tailwind CSS.
 
 ## License
 
-This project has the MIT License
+This project has the [MIT License](</LICENSE>)
 
 
 
