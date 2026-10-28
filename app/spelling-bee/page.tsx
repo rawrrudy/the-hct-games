@@ -1,4 +1,4 @@
-"use cient";
+"use client";
 
 import { useState } from "react";
 
