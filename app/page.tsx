@@ -116,7 +116,9 @@ export default function Home() {
                       ? "/strands"
                       : game.name === "Spelling Bee"
                         ? "/spelling-bee"
-                        : "#"
+                        : game.name === "Sudoku"
+                          ? "/sudoku"
+                          : "#"
               }
               className="group block rounded-2xl border border-[#E8E5DE] bg-white p-5 transition duration-200 hover:-translate-y-1 hover:border-[#C8C3B7]"
             >
