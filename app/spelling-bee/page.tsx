@@ -119,7 +119,10 @@ export default function SpellingBeePage() {
       setMessage("That word uses a letter outside today's hive.");
     } else if (found.includes(word)) {
       setMessage("You already found that word, silly!");
-    } else if (!puzzle.words.includes(word)) {
+    } else if (
+      !puzzle.words.includes(word) &&
+      !puzzle.pangrams.includes(word)
+    ) {
       setMessage("Not in today's word list! Try another.");
     } else {
       setFound((current) => [...current, word]);
