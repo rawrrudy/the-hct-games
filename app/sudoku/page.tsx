@@ -5,17 +5,16 @@ import { useEffect, useState } from "react";
 
 type Board = number[][];
 type Notes = Set<string>;
+type Difficulty = "easy" | "medium" | "hard";
 
-const PUZZLE: Board = [
-  [5, 3, 0, 0, 7, 0, 0, 0, 0],
-  [6, 0, 0, 1, 9, 5, 0, 0, 0],
-  [0, 9, 8, 0, 0, 0, 0, 6, 0],
-  [8, 0, 0, 0, 6, 0, 0, 0, 3],
-  [4, 0, 0, 8, 0, 3, 0, 0, 1],
-  [7, 0, 0, 0, 2, 0, 0, 0, 6],
-  [0, 6, 0, 0, 0, 0, 2, 8, 0],
-  [0, 0, 0, 4, 1, 9, 0, 0, 5],
-  [0, 0, 0, 0, 8, 0, 0, 7, 9],
+const DIFFICULTIES: {
+  value: Difficulty;
+  label: string;
+  description: string;
+}[] = [
+  { value: "easy", label: "Easy", description: "A gentle warm-up" },
+  { value: "medium", label: "Medium", description: "A little challenge" },
+  { value: "hard", label: "Hard", description: "For the experts" },
 ];
 
 function key(row: number, col: number) {
@@ -50,30 +49,37 @@ function isSolved(board: Board) {
       }
     }
   }
+
   return true;
 }
 
 export default function SudokuPage() {
-  const [board, setBoard] = useState<Board>(
-    PUZZLE.map((row) => [...row])
-  );
+  const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
+  const [puzzle, setPuzzle] = useState<Board | null>(null);
+  const [solution, setSolution] = useState<Board | null>(null);
+  const [board, setBoard] = useState<Board | null>(null);
+
   const [selected, setSelected] = useState<[number, number] | null>(null);
   const [notes, setNotes] = useState<Notes>(new Set());
   const [notesMode, setNotesMode] = useState(false);
   const [mistakes, setMistakes] = useState(0);
   const [message, setMessage] = useState("Fill every row, column, and box.");
-  const [startedAt, setStartedAt] = useState(Date.now());
+  const [startedAt, setStartedAt] = useState<number | null>(null);
   const [seconds, setSeconds] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const complete = board ? isSolved(board) : false;
 
   useEffect(() => {
+    if (!startedAt || complete) return;
+
     const timer = window.setInterval(() => {
       setSeconds(Math.floor((Date.now() - startedAt) / 1000));
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [startedAt]);
-
-  const complete = isSolved(board);
+  }, [startedAt, complete]);
 
   function formatTime(total: number) {
     const minutes = Math.floor(total / 60).toString().padStart(2, "0");
@@ -81,12 +87,47 @@ export default function SudokuPage() {
     return `${minutes}:${seconds}`;
   }
 
+  async function loadPuzzle(selectedDifficulty: Difficulty) {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(
+        `/api/sudoku?difficulty=${selectedDifficulty}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Could not load the Sudoku puzzle.");
+      }
+
+      const data = await response.json();
+
+      setDifficulty(selectedDifficulty);
+      setPuzzle(data.puzzle);
+      setSolution(data.solution);
+      setBoard(data.puzzle.map((row: number[]) => [...row]));
+
+      setSelected(null);
+      setNotes(new Set());
+      setNotesMode(false);
+      setMistakes(0);
+      setSeconds(0);
+      setStartedAt(Date.now());
+      setMessage("Fill every row, column, and box.");
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong loading the puzzle. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function enterNumber(value: number) {
-    if (!selected || complete) return;
+    if (!selected || !board || !puzzle || !solution || complete) return;
 
     const [row, col] = selected;
 
-    if (PUZZLE[row][col] !== 0) {
+    if (puzzle[row][col] !== 0) {
       setMessage("That number is part of the original puzzle.");
       return;
     }
@@ -106,6 +147,12 @@ export default function SudokuPage() {
       return;
     }
 
+    if (value !== solution[row][col]) {
+      setMistakes((current) => current + 1);
+      setMessage("Not quite! Try another number.");
+      return;
+    }
+
     const next = board.map((r) => [...r]);
     next[row][col] = value;
 
@@ -116,6 +163,7 @@ export default function SudokuPage() {
     }
 
     setBoard(next);
+
     setNotes((current) => {
       const updated = new Set(current);
       for (let n = 1; n <= 9; n++) {
@@ -123,6 +171,7 @@ export default function SudokuPage() {
       }
       return updated;
     });
+
     setMessage("Nice move!");
 
     if (isSolved(next)) {
@@ -131,10 +180,10 @@ export default function SudokuPage() {
   }
 
   function eraseCell() {
-    if (!selected || complete) return;
+    if (!selected || !board || !puzzle || complete) return;
 
     const [row, col] = selected;
-    if (PUZZLE[row][col] !== 0) return;
+    if (puzzle[row][col] !== 0) return;
 
     const next = board.map((r) => [...r]);
     next[row][col] = 0;
@@ -147,11 +196,14 @@ export default function SudokuPage() {
       }
       return updated;
     });
+
     setMessage("Cell cleared.");
   }
 
   function resetPuzzle() {
-    setBoard(PUZZLE.map((row) => [...row]));
+    if (!puzzle) return;
+
+    setBoard(puzzle.map((row) => [...row]));
     setSelected(null);
     setNotes(new Set());
     setNotesMode(false);
@@ -161,9 +213,8 @@ export default function SudokuPage() {
     setMessage("Fresh start. You've got this!");
   }
 
-  const selectedValue = selected
-    ? board[selected[0]][selected[1]]
-    : 0;
+  const selectedValue =
+    selected && board ? board[selected[0]][selected[1]] : 0;
 
   return (
     <main className="min-h-screen bg-[#FAF9F6] px-3 py-6 text-[#24241F] sm:px-6 sm:py-8">
@@ -180,153 +231,230 @@ export default function SudokuPage() {
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#77766F]">
             HCT Sudoku
           </p>
-          <h2 className="mt-2 text-2xl font-bold">A little number therapy.</h2>
+          <h2 className="mt-2 text-2xl font-bold">
+            A little number therapy.
+          </h2>
           <p className="mt-2 text-sm text-[#77766F]">
             Fill the grid so each row, column, and 3×3 box contains 1–9.
           </p>
         </section>
 
-        <section className="mb-4 grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-[#F2F0E9] p-3 text-center">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
-              Time
+        {!difficulty ? (
+          <section className="rounded-2xl border border-[#E8E5DE] bg-white p-5 sm:p-7">
+            <h2 className="text-center text-xl font-bold">
+              Choose your difficulty
+            </h2>
+            <p className="mt-2 text-center text-sm text-[#77766F]">
+              How challenging should today's puzzle be?
             </p>
-            <p className="mt-1 text-lg font-extrabold tabular-nums">
-              {formatTime(seconds)}
-            </p>
-          </div>
-          <div className="rounded-xl bg-[#F2F0E9] p-3 text-center">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
-              Mistakes
-            </p>
-            <p className="mt-1 text-lg font-extrabold">{mistakes}</p>
-          </div>
-          <div className="rounded-xl bg-[#F2F0E9] p-3 text-center">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
-              Filled
-            </p>
-            <p className="mt-1 text-lg font-extrabold">
-              {board.flat().filter(Boolean).length}/81
-            </p>
-          </div>
-        </section>
 
-        <section className="overflow-hidden rounded-xl border-2 border-[#24241F] bg-white">
-          <div className="grid grid-cols-9">
-            {board.flatMap((row, rowIndex) =>
-              row.map((value, colIndex) => {
-                const fixed = PUZZLE[rowIndex][colIndex] !== 0;
-                const isSelected =
-                  selected?.[0] === rowIndex && selected?.[1] === colIndex;
-                const sameValue =
-                  selectedValue !== 0 && value === selectedValue;
-                const sameRow = selected?.[0] === rowIndex;
-                const sameCol = selected?.[1] === colIndex;
-                const sameBox =
-                  selected &&
-                  Math.floor(selected[0] / 3) === Math.floor(rowIndex / 3) &&
-                  Math.floor(selected[1] / 3) === Math.floor(colIndex / 3);
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              {DIFFICULTIES.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => loadPuzzle(item.value)}
+                  className="rounded-xl border border-[#E8E5DE] bg-[#FAF9F6] p-5 text-center transition hover:border-[#24241F] hover:bg-[#F2F0E9] disabled:opacity-50"
+                >
+                  <span className="block text-lg font-extrabold">
+                    {item.label}
+                  </span>
+                  <span className="mt-1 block text-xs text-[#77766F]">
+                    {item.description}
+                  </span>
+                </button>
+              ))}
+            </div>
 
-                const conflict =
-                  value !== 0 &&
-                  !isValid(board, rowIndex, colIndex, value);
-
-                const cellNotes = Array.from({ length: 9 }, (_, i) => i + 1)
-                  .filter((n) => notes.has(`${key(rowIndex, colIndex)}:${n}`));
-
-                return (
-                  <button
-                    key={key(rowIndex, colIndex)}
-                    type="button"
-                    onClick={() => setSelected([rowIndex, colIndex])}
-                    aria-label={`Row ${rowIndex + 1}, column ${colIndex + 1}, ${value || "empty"}`}
-                    className={`relative flex aspect-square min-w-0 items-center justify-center border-r border-b border-[#E5E2DA] text-base sm:text-xl ${
-                      colIndex === 2 || colIndex === 5
-                        ? "border-r-2 border-r-[#24241F]"
-                        : ""
-                    } ${
-                      rowIndex === 2 || rowIndex === 5
-                        ? "border-b-2 border-b-[#24241F]"
-                        : ""
-                    } ${
-                      isSelected
-                        ? "bg-[#F4D66D]"
-                        : sameValue
-                          ? "bg-[#F7EBC0]"
-                          : sameRow || sameCol || sameBox
-                            ? "bg-[#F2F0E9]"
-                            : "bg-white"
-                    } ${
-                      fixed
-                        ? "font-extrabold"
-                        : "font-medium text-[#3974D6]"
-                    } ${conflict ? "text-red-600" : ""}`}
-                  >
-                    {value || (
-                      <span className="grid h-full w-full grid-cols-3 grid-rows-3 p-0.5 text-[8px] text-[#77766F] sm:text-[10px]">
-                        {cellNotes.map((n) => (
-                          <span key={n}>{n}</span>
-                        ))}
-                      </span>
-                    )}
-                  </button>
-                );
-              })
+            {loading && (
+              <p className="mt-5 text-center text-sm font-semibold">
+                Loading your puzzle...
+              </p>
             )}
-          </div>
-        </section>
 
-        <p className="mt-3 min-h-6 text-center text-sm font-semibold" aria-live="polite">
-          {complete ? "Puzzle complete! LET'S GOOOO!" : message}
-        </p>
-
-        <section className="mt-4 rounded-2xl border border-[#E8E5DE] bg-white p-4">
-          <div className="grid grid-cols-9 gap-1.5">
-            {Array.from({ length: 9 }, (_, i) => i + 1).map((number) => (
+            {error && (
+              <p className="mt-5 text-center text-sm font-semibold text-red-600">
+                {error}
+              </p>
+            )}
+          </section>
+        ) : board && puzzle ? (
+          <>
+            <div className="mb-4 flex items-center justify-between">
+              <span className="rounded-full bg-[#F2F0E9] px-4 py-2 text-sm font-bold capitalize">
+                {difficulty}
+              </span>
               <button
-                key={number}
                 type="button"
-                onClick={() => enterNumber(number)}
-                className="rounded-lg bg-[#E9E7DC] py-3 text-lg font-bold transition hover:bg-[#DAD6C7] active:scale-95"
+                onClick={() => {
+                  setDifficulty(null);
+                  setPuzzle(null);
+                  setSolution(null);
+                  setBoard(null);
+                  setStartedAt(null);
+                }}
+                className="text-sm font-semibold text-[#77766F] hover:text-[#24241F] hover:underline"
               >
-                {number}
+                Change difficulty
               </button>
-            ))}
-          </div>
+            </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => setNotesMode((current) => !current)}
-              className={`rounded-full border px-3 py-2 text-sm font-semibold ${
-                notesMode
-                  ? "border-[#24241F] bg-[#24241F] text-white"
-                  : "border-[#E8E5DE] hover:bg-[#FAF9F6]"
-              }`}
-            >
-              {notesMode ? "Notes: On" : "Notes"}
-            </button>
-            <button
-              type="button"
-              onClick={eraseCell}
-              className="rounded-full border border-[#E8E5DE] px-3 py-2 text-sm font-semibold hover:bg-[#FAF9F6]"
-            >
-              Erase
-            </button>
-            <button
-              type="button"
-              onClick={resetPuzzle}
-              className="rounded-full border border-[#E8E5DE] px-3 py-2 text-sm font-semibold hover:bg-[#FAF9F6]"
-            >
-              Restart
-            </button>
-          </div>
-        </section>
+            <section className="mb-4 grid grid-cols-3 gap-2">
+              <div className="rounded-xl bg-[#F2F0E9] p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
+                  Time
+                </p>
+                <p className="mt-1 text-lg font-extrabold tabular-nums">
+                  {formatTime(seconds)}
+                </p>
+              </div>
 
-        <p className="mt-4 text-center text-xs text-[#77766F]">
-          Select a cell, then enter a number. Notes mode lets you pencil in
-          candidates.
-        </p>
+              <div className="rounded-xl bg-[#F2F0E9] p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
+                  Mistakes
+                </p>
+                <p className="mt-1 text-lg font-extrabold">{mistakes}</p>
+              </div>
+
+              <div className="rounded-xl bg-[#F2F0E9] p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
+                  Filled
+                </p>
+                <p className="mt-1 text-lg font-extrabold">
+                  {board.flat().filter(Boolean).length}/81
+                </p>
+              </div>
+            </section>
+
+            <section className="overflow-hidden rounded-xl border-2 border-[#24241F] bg-white">
+              <div className="grid grid-cols-9">
+                {board.flatMap((row, rowIndex) =>
+                  row.map((value, colIndex) => {
+                    const fixed = puzzle[rowIndex][colIndex] !== 0;
+                    const isSelected =
+                      selected?.[0] === rowIndex &&
+                      selected?.[1] === colIndex;
+                    const sameValue =
+                      selectedValue !== 0 && value === selectedValue;
+                    const sameRow = selected?.[0] === rowIndex;
+                    const sameCol = selected?.[1] === colIndex;
+                    const sameBox =
+                      selected &&
+                      Math.floor(selected[0] / 3) === Math.floor(rowIndex / 3) &&
+                      Math.floor(selected[1] / 3) === Math.floor(colIndex / 3);
+
+                    const conflict =
+                      value !== 0 &&
+                      !isValid(board, rowIndex, colIndex, value);
+
+                    const cellNotes = Array.from(
+                      { length: 9 },
+                      (_, i) => i + 1
+                    ).filter((n) =>
+                      notes.has(`${key(rowIndex, colIndex)}:${n}`)
+                    );
+
+                    return (
+                      <button
+                        key={key(rowIndex, colIndex)}
+                        type="button"
+                        onClick={() => setSelected([rowIndex, colIndex])}
+                        aria-label={`Row ${rowIndex + 1}, column ${colIndex + 1}, ${value || "empty"}`}
+                        className={`relative flex aspect-square min-w-0 items-center justify-center border-r border-b border-[#E5E2DA] text-base sm:text-xl ${
+                          colIndex === 2 || colIndex === 5
+                            ? "border-r-2 border-r-[#24241F]"
+                            : ""
+                        } ${
+                          rowIndex === 2 || rowIndex === 5
+                            ? "border-b-2 border-b-[#24241F]"
+                            : ""
+                        } ${
+                          isSelected
+                            ? "bg-[#F4D66D]"
+                            : sameValue
+                              ? "bg-[#F7EBC0]"
+                              : sameRow || sameCol || sameBox
+                                ? "bg-[#F2F0E9]"
+                                : "bg-white"
+                        } ${
+                          fixed
+                            ? "font-extrabold"
+                            : "font-medium text-[#3974D6]"
+                        } ${conflict ? "text-red-600" : ""}`}
+                      >
+                        {value || (
+                          <span className="grid h-full w-full grid-cols-3 grid-rows-3 p-0.5 text-[8px] text-[#77766F] sm:text-[10px]">
+                            {cellNotes.map((n) => (
+                              <span key={n}>{n}</span>
+                            ))}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+
+            <p
+              className="mt-3 min-h-6 text-center text-sm font-semibold"
+              aria-live="polite"
+            >
+              {complete ? "Puzzle complete! LET'S GOOOO!" : message}
+            </p>
+
+            <section className="mt-4 rounded-2xl border border-[#E8E5DE] bg-white p-4">
+              <div className="grid grid-cols-9 gap-1.5">
+                {Array.from({ length: 9 }, (_, i) => i + 1).map((number) => (
+                  <button
+                    key={number}
+                    type="button"
+                    onClick={() => enterNumber(number)}
+                    className="rounded-lg bg-[#E9E7DC] py-3 text-lg font-bold transition hover:bg-[#DAD6C7] active:scale-95"
+                  >
+                    {number}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNotesMode((current) => !current)}
+                  className={`rounded-full border px-3 py-2 text-sm font-semibold ${
+                    notesMode
+                      ? "border-[#24241F] bg-[#24241F] text-white"
+                      : "border-[#E8E5DE] hover:bg-[#FAF9F6]"
+                  }`}
+                >
+                  {notesMode ? "Notes: On" : "Notes"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={eraseCell}
+                  className="rounded-full border border-[#E8E5DE] px-3 py-2 text-sm font-semibold hover:bg-[#FAF9F6]"
+                >
+                  Erase
+                </button>
+
+                <button
+                  type="button"
+                  onClick={resetPuzzle}
+                  className="rounded-full border border-[#E8E5DE] px-3 py-2 text-sm font-semibold hover:bg-[#FAF9F6]"
+                >
+                  Restart
+                </button>
+              </div>
+            </section>
+
+            <p className="mt-4 text-center text-xs text-[#77766F]">
+              Select a cell, then enter a number. Notes mode lets you pencil in
+              candidates.
+            </p>
+          </>
+        ) : null}
       </div>
     </main>
   );
