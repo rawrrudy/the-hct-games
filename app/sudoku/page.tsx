@@ -53,6 +53,17 @@ function isSolved(board: Board) {
   return true;
 }
 
+function getTodayDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  return parts;
+}
+
 export default function SudokuPage() {
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [puzzle, setPuzzle] = useState<Board | null>(null);
@@ -71,6 +82,7 @@ export default function SudokuPage() {
 
   const [puzzleDate, setPuzzleDate] = useState<string | null>(null);
   const [progressLoaded, setProgressLoaded] = useState(false);
+  const [archiveDate, setArchiveDate] = useState("");
 
   const complete = board ? isSolved(board) : false;
 
@@ -128,14 +140,21 @@ export default function SudokuPage() {
     return `${minutes}:${seconds}`;
   }
 
-  async function loadPuzzle(selectedDifficulty: Difficulty) {
+  async function loadPuzzle(
+    selectedDifficulty: Difficulty,
+    selectedDate?: string
+  ) {
     setLoading(true);
     setError("");
     setProgressLoaded(false);
 
     try {
+      const dateQuery = selectedDate
+        ? `&date=${encodeURIComponent(selectedDate)}`
+        : "";
+
       const response = await fetch(
-        `/api/sudoku?difficulty=${selectedDifficulty}`
+        `/api/sudoku?difficulty=${selectedDifficulty}${dateQuery}`
       );
 
       if (!response.ok) {
@@ -160,7 +179,7 @@ export default function SudokuPage() {
         localStorage.removeItem(storageKey);
       }
 
-      const validSavedBoard =
+      const validSavedBoard = 
         Array.isArray(saved?.board) &&
         saved.board.length === 9 &&
         saved.board.every(
@@ -173,7 +192,7 @@ export default function SudokuPage() {
             )
         );
 
-      const restoredBoard = validSavedBoard
+      const restoreBoard = validSavedBoard
         ? saved!.board!.map((row) => [...row])
         : data.puzzle.map((row: number[]) => [...row]);
 
@@ -181,7 +200,7 @@ export default function SudokuPage() {
         ? saved!.notes!.filter((note) => typeof note === "string")
         : [];
 
-      const restoredMistakes =
+      const restoreMistakes =
         Number.isInteger(saved?.mistakes) && saved!.mistakes! >= 0
           ? saved!.mistakes!
           : 0;
@@ -195,24 +214,24 @@ export default function SudokuPage() {
       setPuzzleDate(data.date);
       setPuzzle(data.puzzle);
       setSolution(data.solution);
-      setBoard(restoredBoard);
+      setBoard(restoreBoard);
 
       setSelected(null);
       setNotes(new Set(restoredNotes));
       setNotesMode(false);
-      setMistakes(restoredMistakes);
-      setMistakes(restoredSeconds);
+      setMistakes(restoreMistakes);
+      setSeconds(restoredSeconds);
       setStartedAt(Date.now() - restoredSeconds * 1000);
 
       setMessage(
         validSavedBoard
           ? "Welcome back! Your progress has been restored."
-          : "Fill every row, column and box!"
+          : "Fill every row, column, and box!"
       );
 
       setProgressLoaded(true);
     } catch (err) {
-      console.error(err);
+      console.error(err)
       setError("Something went wrong loading the puzzle. Please try again.");
     } finally {
       setLoading(false);
