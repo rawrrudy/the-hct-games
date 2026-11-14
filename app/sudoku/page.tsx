@@ -358,34 +358,75 @@ export default function SudokuPage() {
         {!difficulty ? (
           <section className="rounded-2xl border border-[#E8E5DE] bg-white p-5 sm:p-7">
             <h2 className="text-center text-xl font-bold">
-              Choose your difficulty
+              Choose your puzzle
             </h2>
+
             <p className="mt-2 text-center text-sm text-[#77766F]">
-              How challenging should today's puzzle be?
+              Play today's puzzle or revisit an old favourite!
             </p>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              {DIFFICULTIES.map((item) => (
+            <div className="mt-6">
+              <label
+                htmlFor="archive-data"
+                className="mb-2 block text-sm font-bold"
+              >
+                Select a date
+              </label>
+
+              <input
+                id="archive-date"
+                type="date"
+                value={archiveDate}
+                max={getTodayDate()}
+                onChange={(event) => setArchiveDate(event.target.value)}
+                className="w-full rounded-xl border border-[#E8E5DE] bg-[#FAF9F6] px-4 py-3 text-sm font-semibold outline-none focus:border-[#24241F]"
+              />
+
+              <p className="mt-2 text-xs text-[#77766F]">
+                {archiveDate
+                  ? `Browsing puzzles from ${archiveDate}`
+                  : "Leave this empty to play today's puzzle."}
+              </p>
+
+              {archiveDate && (
                 <button
-                  key={item.value}
                   type="button"
-                  disabled={loading}
-                  onClick={() => loadPuzzle(item.value)}
-                  className="rounded-xl border border-[#E8E5DE] bg-[#FAF9F6] p-5 text-center transition hover:border-[#24241F] hover:bg-[#F2F0E9] disabled:opacity-50"
+                  onClick={() => setArchiveDate("")}
+                  className="mt-2 text-xs font-semibold underline"
                 >
-                  <span className="block text-lg font-extrabold">
-                    {item.label}
-                  </span>
-                  <span className="mt-1 block text-xs text-[#77766F]">
-                    {item.description}
-                  </span>
+                  Clear date · Return to today
                 </button>
-              ))}
+              )}
+            </div>
+
+            <div className="mt-6">
+              <p className="mb-3 text-sm font-bold">Choose difficulty</p>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {DIFFICULTIES.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    disabled={loading}
+                    onClick={() =>
+                      loadPuzzle(item.value, archiveDate || undefined)
+                    }
+                    className="rounded-xl border border-[#E8E5DE] bg-[#FAF9F6] p-5 text-center transition hover:border-[#24241F] hover:bg-[#F2F0E9] disabled:opacity-50"
+                  >
+                    <span className="block text-lg font-extrabold">
+                      {item.label}
+                    </span>
+                    <span className="mt-1 block text-xs text-[#77766F]">
+                      {item.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {loading && (
               <p className="mt-5 text-center text-sm font-semibold">
-                Loading your puzzle...
+                Loading your puzzle :P
               </p>
             )}
 
@@ -398,9 +439,15 @@ export default function SudokuPage() {
         ) : board && puzzle ? (
           <>
             <div className="mb-4 flex items-center justify-between">
-              <span className="rounded-full bg-[#F2F0E9] px-4 py-2 text-sm font-bold capitalize">
-                {difficulty}
-              </span>
+              <div className="flex flex-col gap-1">
+                <span className="w-fit  rounded-full bg-[#F2F0E9] px-4 py-2 text-sm font-bold capitalize">
+                  {difficulty}
+                </span>
+                <span className="text-xs text-[#77766F]">
+                  Puzzle date: {puzzleDate}
+                  {puzzleDate === getTodayDate() ? " · Today" : " · Archive"}
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => {
