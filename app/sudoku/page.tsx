@@ -69,6 +69,9 @@ export default function SudokuPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [puzzleDate, setPuzzleDate] = useState<string | null>(null);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+
   const complete = board ? isSolved(board) : false;
 
   useEffect(() => {
@@ -81,6 +84,44 @@ export default function SudokuPage() {
     return () => window.clearInterval(timer);
   }, [startedAt, complete]);
 
+  useEffect(() => {
+    if (
+      !progressLoaded ||
+      !difficulty ||
+      !puzzleDate ||
+      !puzzle ||
+      !board ||
+      startedAt === null
+    ) {
+      return;
+    }
+
+    const storageKey = `hct-sudoku-${puzzleDate}-${difficulty}`;
+
+    const progress = {
+      board,
+      notes: Array.from(notes),
+      mistakes,
+      seconds,
+    };
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(progress));
+    } catch (error) {
+      console.error("Could not save Sudoku progress.", error);
+    }
+  }, [
+    progressLoaded,
+    difficulty,
+    puzzleDate,
+    puzzle,
+    board,
+    notes,
+    mistakes,
+    seconds,
+    startedAt,
+  ]);
+
   function formatTime(total: number) {
     const minutes = Math.floor(total / 60).toString().padStart(2, "0");
     const seconds = (total % 60).toString().padStart(2, "0");
@@ -90,6 +131,7 @@ export default function SudokuPage() {
   async function loadPuzzle(selectedDifficulty: Difficulty) {
     setLoading(true);
     setError("");
+    setProgressLoaded(false);
 
     try {
       const response = await fetch(
@@ -102,18 +144,73 @@ export default function SudokuPage() {
 
       const data = await response.json();
 
+      const storageKey = `hct-sudoku-${data.date}-${selectedDifficulty}`;
+
+      let saved: {
+        board?: number[][];
+        notes?: string[];
+        mistakes?: number;
+        seconds?: number;
+      } | null = null;
+
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) saved = JSON.parse(stored);
+      } catch {
+        localStorage.removeItem(storageKey);
+      }
+
+      const validSavedBoard =
+        Array.isArray(saved?.board) &&
+        saved.board.length === 9 &&
+        saved.board.every(
+          (row) =>
+            Array.isArray(row) &&
+            row.length === 9 &&
+            row.every(
+              (cell) =>
+                Number.isInteger(cell) && cell >= 0 && cell <= 9
+            )
+        );
+
+      const restoredBoard = validSavedBoard
+        ? saved!.board!.map((row) => [...row])
+        : data.puzzle.map((row: number[]) => [...row]);
+
+      const restoredNotes = Array.isArray(saved?.notes)
+        ? saved!.notes!.filter((note) => typeof note === "string")
+        : [];
+
+      const restoredMistakes =
+        Number.isInteger(saved?.mistakes) && saved!.mistakes! >= 0
+          ? saved!.mistakes!
+          : 0;
+
+      const restoredSeconds =
+        Number.isFinite(saved?.seconds) && saved!.seconds! >= 0
+          ? saved!.seconds!
+          : 0;
+
       setDifficulty(selectedDifficulty);
+      setPuzzleDate(data.date);
       setPuzzle(data.puzzle);
       setSolution(data.solution);
-      setBoard(data.puzzle.map((row: number[]) => [...row]));
+      setBoard(restoredBoard);
 
       setSelected(null);
-      setNotes(new Set());
+      setNotes(new Set(restoredNotes));
       setNotesMode(false);
-      setMistakes(0);
-      setSeconds(0);
-      setStartedAt(Date.now());
-      setMessage("Fill every row, column, and box.");
+      setMistakes(restoredMistakes);
+      setMistakes(restoredSeconds);
+      setStartedAt(Date.now() - restoredSeconds * 1000);
+
+      setMessage(
+        validSavedBoard
+          ? "Welcome back! Your progress has been restored."
+          : "Fill every row, column and box!"
+      );
+
+      setProgressLoaded(true);
     } catch (err) {
       console.error(err);
       setError("Something went wrong loading the puzzle. Please try again.");
