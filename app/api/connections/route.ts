@@ -1,4 +1,4 @@
-import { group } from "console";
+import { connection } from "next/server"
 import { NextResponse } from "next/server";
 
 type ArchiveGroup = {
@@ -17,6 +17,8 @@ const ARCHIVE_URL =
   "https://raw.githubusercontent.com/Eyefyre/NYT-Connections-Answers/main/connections.json";
 
 export async function GET(request: Request) {
+  await connection();
+  
   try {
     const response = await fetch(ARCHIVE_URL, {
       cache: "no-store",

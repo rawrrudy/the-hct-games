@@ -33,6 +33,7 @@ const games = [
     name: "The Crossword",
     description: "Get clued in with wordplay every day.",
     color: "bg-[#E9E5DC]",
+    icon: "/crosswords.svg"
   },
   {
     number: "06",
@@ -63,6 +64,7 @@ const games = [
     name: "Sudoku",
     description: "Try this number game, minus the math.",
     color: "bg-[#E9E7DC]",
+    icon: "/sudoku.svg"
   },
 ];
 

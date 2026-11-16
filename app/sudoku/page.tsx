@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -85,6 +84,11 @@ export default function SudokuPage() {
   const [archiveDate, setArchiveDate] = useState("");
 
   const complete = board ? isSolved(board) : false;
+  const [todayDate, setTodayDate] = useState("");
+
+  useEffect(() => {
+    setTodayDate(getTodayDate());
+  }, []);
 
   useEffect(() => {
     if (!startedAt || complete) return;
@@ -377,7 +381,7 @@ export default function SudokuPage() {
                 id="archive-date"
                 type="date"
                 value={archiveDate}
-                max={getTodayDate()}
+                max={todayDate || undefined}
                 onChange={(event) => setArchiveDate(event.target.value)}
                 className="w-full rounded-xl border border-[#E8E5DE] bg-[#FAF9F6] px-4 py-3 text-sm font-semibold outline-none focus:border-[#24241F]"
               />
@@ -445,7 +449,7 @@ export default function SudokuPage() {
                 </span>
                 <span className="text-xs text-[#77766F]">
                   Puzzle date: {puzzleDate}
-                  {puzzleDate === getTodayDate() ? " · Today" : " · Archive"}
+                  {puzzleDate === todayDate ? " · Today" : " · Archive"}
                 </span>
               </div>
               <button
