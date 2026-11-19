@@ -6,6 +6,13 @@ type Board = number[][];
 type Notes = Set<string>;
 type Difficulty = "easy" | "medium" | "hard";
 
+type SavedProgress = {
+  board?: number[][];
+  notes?: string[];
+  mistakes?: number;
+  seconds?: number;
+};
+
 const DIFFICULTIES: {
   value: Difficulty;
   label: string;
@@ -16,7 +23,13 @@ const DIFFICULTIES: {
   { value: "hard", label: "Hard", description: "For the experts" },
 ];
 
-function key(row: number, col: number) {
+const MONTH_NAMES = [
+  "January", "February", "March", "April",
+  "May", "June", "July", "August",
+  "September", "October", "November", "December",
+];
+
+function cellKey(row: number, col: number) {
   return `${row}-${col}`;
 }
 
@@ -53,14 +66,46 @@ function isSolved(board: Board) {
 }
 
 function getTodayDate() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
 
-  return parts;
+function getCalendarDays(month: string) {
+  if (!month) return [];
+
+  const [year, monthNumber] = month.split("-").map(Number);
+  const firstDay = new Date(year, monthNumber - 1, 1).getDay();
+  const daysInMonth = new Date(year, monthNumber, 0).getDate();
+
+  return [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+}
+
+function formatArchiveDate(yearMonth: string, day: number) {
+  const [year, month] = yearMonth.split("-");
+  return `${year}-${month}-${String(day).padStart(2, "0")}`;
+}
+
+function isValidBoard(board: unknown): board is Board {
+  return (
+    Array.isArray(board) &&
+    board.length === 9 &&
+    board.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === 9 &&
+        row.every(
+          (cell) =>
+            Number.isInteger(cell) && cell >= 0 && cell <= 9
+        )
+    )
+  );
 }
 
 export default function SudokuPage() {
@@ -72,26 +117,90 @@ export default function SudokuPage() {
   const [selected, setSelected] = useState<[number, number] | null>(null);
   const [notes, setNotes] = useState<Notes>(new Set());
   const [notesMode, setNotesMode] = useState(false);
+
   const [mistakes, setMistakes] = useState(0);
   const [message, setMessage] = useState("Fill every row, column, and box.");
+
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [seconds, setSeconds] = useState(0);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const [puzzleDate, setPuzzleDate] = useState<string | null>(null);
   const [progressLoaded, setProgressLoaded] = useState(false);
-  const [archiveDate, setArchiveDate] = useState("");
 
-  const complete = board ? isSolved(board) : false;
+  const [archiveDate, setArchiveDate] = useState("");
+  const [archiveMonth, setArchiveMonth] = useState("");
   const [todayDate, setTodayDate] = useState("");
 
-  useEffect(() => {
-    setTodayDate(getTodayDate());
-  }, []);
+  const [completedPuzzles, setCompletedPuzzles] = useState<
+    Record<string, boolean>
+  >({});
+
+  const complete = board ? isSolved(board) : false;
+
 
   useEffect(() => {
-    if (!startedAt || complete) return;
+    const today = getTodayDate();
+
+    setTodayDate(today);
+    setArchiveMonth(today.slice(0, 7));
+  }, []);
+
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("hct-sudoku-completions");
+
+      if (stored) {
+        const parsed = JSON.parse(stored);
+
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          !Array.isArray(parsed)
+        ) {
+          setCompletedPuzzles(parsed);
+        }
+      }
+    } catch (error) {
+      console.error("Could not load Sudoku completion history:", error);
+    }
+  }, []);
+
+
+  useEffect(() => {
+    if (!complete || !progressLoaded || !difficulty || !puzzleDate) {
+      return;
+    }
+
+    const completionKey = `${puzzleDate}-${difficulty}`;
+
+    setCompletedPuzzles((current) => {
+      if (current[completionKey]) return current;
+
+      const updated = {
+        ...current,
+        [completionKey]: true,
+      };
+
+      try {
+        localStorage.setItem(
+          "hct-sudoku-completions",
+          JSON.stringify(updated)
+        );
+      } catch (error) {
+        console.error("Could not save Sudoku completion:", error);
+      }
+
+      return updated;
+    });
+  }, [complete, progressLoaded, difficulty, puzzleDate]);
+
+
+  useEffect(() => {
+    if (startedAt === null || complete) return;
 
     const timer = window.setInterval(() => {
       setSeconds(Math.floor((Date.now() - startedAt) / 1000));
@@ -99,6 +208,7 @@ export default function SudokuPage() {
 
     return () => window.clearInterval(timer);
   }, [startedAt, complete]);
+
 
   useEffect(() => {
     if (
@@ -124,7 +234,7 @@ export default function SudokuPage() {
     try {
       localStorage.setItem(storageKey, JSON.stringify(progress));
     } catch (error) {
-      console.error("Could not save Sudoku progress.", error);
+      console.error("Could not save Sudoku progress:", error);
     }
   }, [
     progressLoaded,
@@ -140,8 +250,9 @@ export default function SudokuPage() {
 
   function formatTime(total: number) {
     const minutes = Math.floor(total / 60).toString().padStart(2, "0");
-    const seconds = (total % 60).toString().padStart(2, "0");
-    return `${minutes}:${seconds}`;
+    const remainingSeconds = (total % 60).toString().padStart(2, "0");
+
+    return `${minutes}:${remainingSeconds}`;
   }
 
   async function loadPuzzle(
@@ -167,36 +278,38 @@ export default function SudokuPage() {
 
       const data = await response.json();
 
+      if (
+        !isValidBoard(data.puzzle) ||
+        !isValidBoard(data.solution) ||
+        typeof data.date !== "string"
+      ) {
+        throw new Error("The Sudoku API returned invalid puzzle data.");
+      }
+
       const storageKey = `hct-sudoku-${data.date}-${selectedDifficulty}`;
 
-      let saved: {
-        board?: number[][];
-        notes?: string[];
-        mistakes?: number;
-        seconds?: number;
-      } | null = null;
+      let saved: SavedProgress | null = null;
 
       try {
         const stored = localStorage.getItem(storageKey);
-        if (stored) saved = JSON.parse(stored);
+
+        if (stored) {
+          saved = JSON.parse(stored);
+        }
       } catch {
         localStorage.removeItem(storageKey);
       }
 
-      const validSavedBoard = 
-        Array.isArray(saved?.board) &&
-        saved.board.length === 9 &&
-        saved.board.every(
-          (row) =>
-            Array.isArray(row) &&
-            row.length === 9 &&
-            row.every(
-              (cell) =>
-                Number.isInteger(cell) && cell >= 0 && cell <= 9
-            )
+      const validSavedBoard =
+        isValidBoard(saved?.board) &&
+        data.puzzle.every((row: number[], r: number) =>
+          row.every(
+            (value: number, c: number) =>
+              value === 0 || saved!.board![r][c] === value
+          )
         );
 
-      const restoreBoard = validSavedBoard
+      const restoredBoard = validSavedBoard
         ? saved!.board!.map((row) => [...row])
         : data.puzzle.map((row: number[]) => [...row]);
 
@@ -204,7 +317,7 @@ export default function SudokuPage() {
         ? saved!.notes!.filter((note) => typeof note === "string")
         : [];
 
-      const restoreMistakes =
+      const restoredMistakes =
         Number.isInteger(saved?.mistakes) && saved!.mistakes! >= 0
           ? saved!.mistakes!
           : 0;
@@ -218,24 +331,24 @@ export default function SudokuPage() {
       setPuzzleDate(data.date);
       setPuzzle(data.puzzle);
       setSolution(data.solution);
-      setBoard(restoreBoard);
+      setBoard(restoredBoard);
 
       setSelected(null);
       setNotes(new Set(restoredNotes));
       setNotesMode(false);
-      setMistakes(restoreMistakes);
+      setMistakes(restoredMistakes);
       setSeconds(restoredSeconds);
       setStartedAt(Date.now() - restoredSeconds * 1000);
 
       setMessage(
         validSavedBoard
           ? "Welcome back! Your progress has been restored."
-          : "Fill every row, column, and box!"
+          : "Fill every row, column, and box."
       );
 
       setProgressLoaded(true);
     } catch (err) {
-      console.error(err)
+      console.error(err);
       setError("Something went wrong loading the puzzle. Please try again.");
     } finally {
       setLoading(false);
@@ -252,18 +365,19 @@ export default function SudokuPage() {
       return;
     }
 
-    const cellKey = key(row, col);
+    const currentCellKey = cellKey(row, col);
 
     if (notesMode) {
       setNotes((current) => {
         const next = new Set(current);
-        const noteKey = `${cellKey}:${value}`;
+        const noteKey = `${currentCellKey}:${value}`;
 
         if (next.has(noteKey)) next.delete(noteKey);
         else next.add(noteKey);
 
         return next;
       });
+
       return;
     }
 
@@ -286,9 +400,11 @@ export default function SudokuPage() {
 
     setNotes((current) => {
       const updated = new Set(current);
+
       for (let n = 1; n <= 9; n++) {
-        updated.delete(`${cellKey}:${n}`);
+        updated.delete(`${currentCellKey}:${n}`);
       }
+
       return updated;
     });
 
@@ -303,17 +419,21 @@ export default function SudokuPage() {
     if (!selected || !board || !puzzle || complete) return;
 
     const [row, col] = selected;
+
     if (puzzle[row][col] !== 0) return;
 
     const next = board.map((r) => [...r]);
     next[row][col] = 0;
+
     setBoard(next);
 
     setNotes((current) => {
       const updated = new Set(current);
+
       for (let n = 1; n <= 9; n++) {
-        updated.delete(`${key(row, col)}:${n}`);
+        updated.delete(`${cellKey(row, col)}:${n}`);
       }
+
       return updated;
     });
 
@@ -333,8 +453,29 @@ export default function SudokuPage() {
     setMessage("Fresh start. You've got this!");
   }
 
+  function changeArchiveMonth(offset: number) {
+    if (!archiveMonth) return;
+
+    const [year, month] = archiveMonth.split("-").map(Number);
+    const next = new Date(year, month - 1 + offset, 1);
+
+    const nextMonth = `${next.getFullYear()}-${String(
+      next.getMonth() + 1
+    ).padStart(2, "0")}`;
+
+    if (nextMonth > todayDate.slice(0, 7)) return;
+
+    setArchiveMonth(nextMonth);
+  }
+
   const selectedValue =
     selected && board ? board[selected[0]][selected[1]] : 0;
+
+  const monthParts = archiveMonth.split("-").map(Number);
+  const calendarTitle =
+    monthParts.length === 2 && archiveMonth
+      ? `${MONTH_NAMES[monthParts[1] - 1]} ${monthParts[0]}`
+      : "Loading calendar...";
 
   return (
     <main className="min-h-screen bg-[#FAF9F6] px-3 py-6 text-[#24241F] sm:px-6 sm:py-8">
@@ -343,7 +484,9 @@ export default function SudokuPage() {
           <a href="/" className="text-sm font-semibold hover:underline">
             ← HCT Games
           </a>
+
           <h1 className="text-xl font-extrabold tracking-tight">Sudoku</h1>
+
           <span className="w-[76px]" />
         </header>
 
@@ -351,9 +494,11 @@ export default function SudokuPage() {
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#77766F]">
             HCT Sudoku
           </p>
+
           <h2 className="mt-2 text-2xl font-bold">
-            A little number therapy.
+            A little number therapy :P
           </h2>
+
           <p className="mt-2 text-sm text-[#77766F]">
             Fill the grid so each row, column, and 3×3 box contains 1–9.
           </p>
@@ -370,35 +515,132 @@ export default function SudokuPage() {
             </p>
 
             <div className="mt-6">
-              <label
-                htmlFor="archive-data"
-                className="mb-2 block text-sm font-bold"
-              >
-                Select a date
-              </label>
+              <div className="mb-4 flex items-center justify-between">
+                <button
+                  type="button"
+                  disabled={
+                    !archiveMonth ||
+                    archiveMonth <= todayDate.slice(0, 7)
+                  }
+                  onClick={() => changeArchiveMonth(-1)}
+                  className="rounded-lg border border-[#E8E5DE] px-3 py-2 text-sm font-bold transition hover:bg-[#F2F0E9] disabled:opacity-30"
+                  aria-label="Previous month"
+                >
+                  ←
+                </button>
 
-              <input
-                id="archive-date"
-                type="date"
-                value={archiveDate}
-                max={todayDate || undefined}
-                onChange={(event) => setArchiveDate(event.target.value)}
-                className="w-full rounded-xl border border-[#E8E5DE] bg-[#FAF9F6] px-4 py-3 text-sm font-semibold outline-none focus:border-[#24241F]"
-              />
+                <h3 className="text-lg font-bold">{calendarTitle}</h3>
 
-              <p className="mt-2 text-xs text-[#77766F]">
+                <button
+                  type="button"
+                  disabled={archiveMonth === todayDate.slice(0, 7)}
+                  onClick={() => changeArchiveMonth(1)}
+                  className="rounded-lg border border-[#E8E5DE] px-3 py-2 text-sm font-bold transition hover:bg-[#F2F0E9] disabled:opacity-30"
+                  aria-label="Next month"
+                >
+                  →
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1.5">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                  (day) => (
+                    <div
+                      key={day}
+                      className="py-2 text-center text-xs font-bold text-[#77766F]"
+                    >
+                      {day}
+                    </div>
+                  )
+                )}
+
+                {getCalendarDays(archiveMonth).map((day, index) => {
+                  if (day === null) {
+                    return <div key={`empty-${index}`} />;
+                  }
+
+                  const date = formatArchiveDate(archiveMonth, day);
+                  const isFuture = date > todayDate;
+                  const isToday = date === todayDate;
+                  const isSelected = date === (archiveDate || todayDate);
+
+                  const easyDone = completedPuzzles[`${date}-easy`];
+                  const mediumDone = completedPuzzles[`${date}-medium`];
+                  const hardDone = completedPuzzles[`${date}-hard`];
+
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      disabled={isFuture || !todayDate}
+                      onClick={() => setArchiveDate(date)}
+                      aria-label={`${date}${isToday ? ", today" : ""}${easyDone ? ", easy completed" : ""}${mediumDone ? ", medium completed" : ""}${hardDone ? ", hard completed" : ""}`}
+                      className={`flex aspect-square min-w-0 flex-col items-center justify-center rounded-xl border transition ${
+                        isSelected
+                          ? "border-[#24241F] bg-[#24241F] text-white"
+                          : isToday
+                            ? "border-[#24241F] bg-[#F2F0E9] font-extrabold"
+                            : "border-transparent hover:border-[#E8E5DE] hover:bg-[#F2F0E9]"
+                      } ${
+                        isFuture
+                          ? "cursor-not-allowed opacity-25"
+                          : ""
+                      }`}
+                    >
+                      <span className="text-sm font-semibold">{day}</span>
+
+                      <span className="mt-1 flex gap-0.5">
+                        {[
+                          { done: easyDone, color: "#16A34A" },
+                          { done: mediumDone, color: "#D97706" },
+                          { done: hardDone, color: "#3974D6" },
+                        ].map((item, i) => (
+                          <span
+                            key={i}
+                            className="h-1 w-1 rounded-full"
+                            style={{
+                              backgroundColor: item.done
+                                ? item.color
+                                : "transparent",
+                            }}
+                          />
+                        ))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-[#77766F]">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[#16A34A]" />
+                  Easy
+                </span>
+
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[#D97706]" />
+                  Medium
+                </span>
+
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[#3974D6]" />
+                  Hard
+                </span>
+              </div>
+
+              <p className="mt-4 text-sm text-[#77766F]">
                 {archiveDate
-                  ? `Browsing puzzles from ${archiveDate}`
-                  : "Leave this empty to play today's puzzle."}
+                  ? `Selected: ${archiveDate}`
+                  : "Select a date to explore its puzzles."}
               </p>
 
               {archiveDate && (
                 <button
                   type="button"
                   onClick={() => setArchiveDate("")}
-                  className="mt-2 text-xs font-semibold underline"
+                  className="mt-1 text-xs font-semibold underline"
                 >
-                  Clear date · Return to today
+                  Clear selection · Play today's puzzle
                 </button>
               )}
             </div>
@@ -411,7 +653,7 @@ export default function SudokuPage() {
                   <button
                     key={item.value}
                     type="button"
-                    disabled={loading}
+                    disabled={loading || !todayDate}
                     onClick={() =>
                       loadPuzzle(item.value, archiveDate || undefined)
                     }
@@ -420,6 +662,7 @@ export default function SudokuPage() {
                     <span className="block text-lg font-extrabold">
                       {item.label}
                     </span>
+
                     <span className="mt-1 block text-xs text-[#77766F]">
                       {item.description}
                     </span>
@@ -442,16 +685,19 @@ export default function SudokuPage() {
           </section>
         ) : board && puzzle ? (
           <>
+
             <div className="mb-4 flex items-center justify-between">
               <div className="flex flex-col gap-1">
-                <span className="w-fit  rounded-full bg-[#F2F0E9] px-4 py-2 text-sm font-bold capitalize">
+                <span className="w-fit rounded-full bg-[#F2F0E9] px-4 py-2 text-sm font-bold capitalize">
                   {difficulty}
                 </span>
+
                 <span className="text-xs text-[#77766F]">
                   Puzzle date: {puzzleDate}
                   {puzzleDate === todayDate ? " · Today" : " · Archive"}
                 </span>
               </div>
+
               <button
                 type="button"
                 onClick={() => {
@@ -460,6 +706,8 @@ export default function SudokuPage() {
                   setSolution(null);
                   setBoard(null);
                   setStartedAt(null);
+                  setProgressLoaded(false);
+                  setSelected(null);
                 }}
                 className="text-sm font-semibold text-[#77766F] hover:text-[#24241F] hover:underline"
               >
@@ -472,6 +720,7 @@ export default function SudokuPage() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
                   Time
                 </p>
+
                 <p className="mt-1 text-lg font-extrabold tabular-nums">
                   {formatTime(seconds)}
                 </p>
@@ -481,6 +730,7 @@ export default function SudokuPage() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
                   Mistakes
                 </p>
+
                 <p className="mt-1 text-lg font-extrabold">{mistakes}</p>
               </div>
 
@@ -488,6 +738,7 @@ export default function SudokuPage() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#77766F]">
                   Filled
                 </p>
+
                 <p className="mt-1 text-lg font-extrabold">
                   {board.flat().filter(Boolean).length}/81
                 </p>
@@ -499,17 +750,23 @@ export default function SudokuPage() {
                 {board.flatMap((row, rowIndex) =>
                   row.map((value, colIndex) => {
                     const fixed = puzzle[rowIndex][colIndex] !== 0;
+
                     const isSelected =
                       selected?.[0] === rowIndex &&
                       selected?.[1] === colIndex;
+
                     const sameValue =
                       selectedValue !== 0 && value === selectedValue;
+
                     const sameRow = selected?.[0] === rowIndex;
                     const sameCol = selected?.[1] === colIndex;
+
                     const sameBox =
                       selected &&
-                      Math.floor(selected[0] / 3) === Math.floor(rowIndex / 3) &&
-                      Math.floor(selected[1] / 3) === Math.floor(colIndex / 3);
+                      Math.floor(selected[0] / 3) ===
+                        Math.floor(rowIndex / 3) &&
+                      Math.floor(selected[1] / 3) ===
+                        Math.floor(colIndex / 3);
 
                     const conflict =
                       value !== 0 &&
@@ -519,12 +776,12 @@ export default function SudokuPage() {
                       { length: 9 },
                       (_, i) => i + 1
                     ).filter((n) =>
-                      notes.has(`${key(rowIndex, colIndex)}:${n}`)
+                      notes.has(`${cellKey(rowIndex, colIndex)}:${n}`)
                     );
 
                     return (
                       <button
-                        key={key(rowIndex, colIndex)}
+                        key={cellKey(rowIndex, colIndex)}
                         type="button"
                         onClick={() => setSelected([rowIndex, colIndex])}
                         aria-label={`Row ${rowIndex + 1}, column ${colIndex + 1}, ${value || "empty"}`}
@@ -573,16 +830,18 @@ export default function SudokuPage() {
 
             <section className="mt-4 rounded-2xl border border-[#E8E5DE] bg-white p-4">
               <div className="grid grid-cols-9 gap-1.5">
-                {Array.from({ length: 9 }, (_, i) => i + 1).map((number) => (
-                  <button
-                    key={number}
-                    type="button"
-                    onClick={() => enterNumber(number)}
-                    className="rounded-lg bg-[#E9E7DC] py-3 text-lg font-bold transition hover:bg-[#DAD6C7] active:scale-95"
-                  >
-                    {number}
-                  </button>
-                ))}
+                {Array.from({ length: 9 }, (_, i) => i + 1).map(
+                  (number) => (
+                    <button
+                      key={number}
+                      type="button"
+                      onClick={() => enterNumber(number)}
+                      className="rounded-lg bg-[#E9E7DC] py-3 text-lg font-bold transition hover:bg-[#DAD6C7] active:scale-95"
+                    >
+                      {number}
+                    </button>
+                  )
+                )}
               </div>
 
               <div className="mt-4 grid grid-cols-3 gap-2">
@@ -617,8 +876,8 @@ export default function SudokuPage() {
             </section>
 
             <p className="mt-4 text-center text-xs text-[#77766F]">
-              Select a cell, then enter a number. Notes mode lets you pencil in
-              candidates.
+              Select a cell, then enter a number. Notes mode lets you pencil
+              in candidates.
             </p>
           </>
         ) : null}
