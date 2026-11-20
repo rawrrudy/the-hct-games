@@ -21,6 +21,7 @@ export async function GET() {
       title: puzzle.title,
       date: puzzle.date,
       dimensions: `${puzzle.rows}x${puzzle.cols}`,
+      grid: puzzle.grid,
       acrossCount: puzzle.across.length,
       downCount: puzzle.down.length,
       totalClues: puzzle.across.length + puzzle.down.length,
