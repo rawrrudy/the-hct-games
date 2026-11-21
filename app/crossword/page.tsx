@@ -237,6 +237,33 @@ export default function CrosswordPage() {
     });
   }
 
+  function checkAnswers() {
+    if (!puzzle) return;
+
+    const incorrect: Record<string, boolean> = {};
+
+    for (const clue of [...puzzle.across, ...puzzle.down]) {
+      const dr = clue.direction === "down" ? 1 : 0;
+      const dc = clue.direction === "across" ? 1 : 0;
+
+      for (let i = 0; i < clue.answer.length; i++) {
+        const row = clue.row + dr * i;
+        const col = clue.col + dc * i;
+        const key = `${row}-${col}`;
+
+        const enteredLetter = entries[key];
+
+        if (!enteredLetter) continue;
+
+        if (enteredLetter !== clue.answer[i]) {
+          incorrect[key] = true;
+        }
+      }
+    }
+
+    setCheckedCells(incorrect);
+  }
+
   function toggleDirection() {
     if (!puzzle || !selectedCell) return;
 
@@ -365,10 +392,14 @@ export default function CrosswordPage() {
                             isBlack
                               ? "bg-[#292929]"
                               : isSelected
-                                ? "bg-[#e7c878]"
-                                : isActive
-                                  ? "bg-[#f2e5bd]"
-                                  : "bg-white"
+                                ? checkedCells[`${rowIndex}-${colIndex}`]
+                                  ? "bg-red-200"
+                                  : "bg-[#ec7c878]"
+                                : checkedCells[`${rowIndex}-${colIndex}`]
+                                  ? "bg-red-100"
+                                  : isActive
+                                    ? "bg-[#f2e5bd]"
+                                    : "bg-white"
                           }
                           ${
                             !isBlack
@@ -440,6 +471,15 @@ export default function CrosswordPage() {
               <span className="ml-auto text-xs text-[#999]">
                 {clues.length} clues
               </span>
+            </div>
+
+            <div className="flex justify-end py-3">
+              <button
+                onClick={checkAnswers}
+                className="px-5 py-2 rounded-md bg-[#292929] text-white text-sm font-medium hover:bg-[#444] transition"
+              >
+                Check answers
+              </button>
             </div>
 
             <div className="py-5 border-b border-[#e8e5df] min-h-[110px]">
