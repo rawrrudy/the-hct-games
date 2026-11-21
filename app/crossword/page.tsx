@@ -35,6 +35,10 @@ export default function CrosswordPage() {
   const [direction, setDirection] = useState<Direction>("across");
   const [activeClue, setActiveClue] = useState<CrosswordClue | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
+  const [entries, setEntries] = useState<Record<string, string>>({});
+  const [checkedCells, setCheckedCells] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
     async function loadPuzzle() {
@@ -95,6 +99,88 @@ export default function CrosswordPage() {
 
     return cells;
   }, [activeClue]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!activeClue || !selectedCell) return;
+
+      const currentIndex = activeCells.findIndex(
+        (cell) =>
+          cell.row === selectedCell.row &&
+          cell.col === selectedCell.col
+      );
+
+      if (currentIndex === -1) return;
+
+      const currentKey = `${selectedCell.row}-${selectedCell.col}`;
+
+      if (/^[a-zA-Z]$/.test(event.key)) {
+        event.preventDefault();
+
+        setEntries((previous) => ({
+          ...previous,
+          [currentKey]: event.key.toUpperCase(),
+        }));
+
+        const nextCell = activeCells[currentIndex + 1];
+
+        if (nextCell) {
+          setSelectedCell(nextCell);
+        }
+
+        return;
+      }
+
+      if (event.key === "Backspace") {
+        event.preventDefault();
+
+        if (entries[currentKey]) {
+          setEntries((previous) => {
+            const updated = { ...previous };
+            delete updated[currentKey];
+            return updated;
+          });
+        } else if (currentIndex > 0) {
+          const previousCell = activeCells[currentIndex - 1];
+          const previousKey = `${previousCell.row}-${previousCell.col}`;
+
+          setEntries((previous) => {
+            const updated = { ...previous };
+            delete updated[previousKey];
+            return updated;
+          });
+
+          setSelectedCell(previousCell);
+        }
+
+        return;
+      }
+
+      if (
+        event.key === "ArrowRight" ||
+        event.key === "ArrowLeft" ||
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp"
+      ) {
+        event.preventDefault();
+
+        const nextIndex =
+          event.key === "ArrowRight" || event.key === "ArrowDown"
+            ? currentIndex + 1
+            : currentIndex - 1;
+
+        if (activeCells[nextIndex]) {
+          setSelectedCell(activeCells[nextIndex]);
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeClue, selectedCell, activeCells, entries]);
 
   const clueNumbers = useMemo(() => {
     if (!puzzle) return new Map<string, number>();
@@ -206,7 +292,6 @@ export default function CrosswordPage() {
     <main className="min-h-screen bg-[#faf9f6] text-[#252525] px-5 py-8 sm:px-8">
       <div className="max-w-6xl mx-auto">
 
-        {/* Header */}
         <header className="mb-8">
           <a
             href="/"
@@ -300,6 +385,12 @@ export default function CrosswordPage() {
                         {!isBlack && number && (
                           <span className="absolute top-[2px] left-[3px] text-[clamp(5px,0.9vw,10px)] leading-none font-medium text-[#444]">
                             {number}
+                          </span>
+                        )}
+
+                        {!isBlack && (
+                          <span className="text-[clamp(12px,2vw,25px)] font-semibold text-[#252525]">
+                            {entries[`${rowIndex}-${colIndex}`] ?? ""}
                           </span>
                         )}
                       </button>
@@ -412,7 +503,7 @@ export default function CrosswordPage() {
         <footer className="border-t border-[#e8e5df] mt-12 pt-5 flex items-center justify-between text-xs text-[#aaa]">
           <span>The HCT Games</span>
           <span>
-            {puzzle.rows} × {puzzle.grid[0].length}
+            {puzzle.grid.length} x {puzzle.grid[0].length}
           </span>
         </footer>
       </div>
