@@ -39,6 +39,7 @@ export default function CrosswordPage() {
   const [checkedCells, setCheckedCells] = useState<
     Record<string, boolean>
   >({});
+  const [progressLoaded, setProgressLoaded] = useState(false);
 
   useEffect(() => {
     async function loadPuzzle() {
@@ -76,6 +77,46 @@ export default function CrosswordPage() {
     loadPuzzle();
   }, []);
 
+  useEffect(() => {
+    if (!puzzle) return;
+
+    try {
+      const savedProgress = localStorage.getItem(
+        `hct-crossword-${puzzle.date}`
+      );
+
+      if (savedProgress) {
+        const parsed = JSON.parse(savedProgress);
+
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          !Array.isArray(parsed) &&
+          parsed.entries &&
+          typeof parsed.entries === "object" &&
+          !Array.isArray(parsed.entries)
+        ) {
+          setEntries(parsed.entries);
+        }
+      }
+    } catch (error) {
+      console.error("Could not load crossword progress:", error);
+    } finally {
+      setProgressLoaded(true);
+    }
+  }, [puzzle]);
+
+  useEffect(() => {
+    if (!puzzle || !progressLoaded) return;
+
+    localStorage.setItem(
+      `hct-sudoku-${puzzle.date}`,
+      JSON.stringify({
+        entries,
+      })
+    );
+  }, [entries, puzzle, progressLoaded])
+
   const clues = useMemo(() => {
     if (!puzzle) return [];
     return direction === "across" ? puzzle.across : puzzle.down;
@@ -95,7 +136,7 @@ export default function CrosswordPage() {
           activeClue.col +
           (activeClue.direction === "across" ? i : 0),
       });
-    }
+    }  
 
     return cells;
   }, [activeClue]);
@@ -122,6 +163,12 @@ export default function CrosswordPage() {
           [currentKey]: event.key.toUpperCase(),
         }));
 
+        setCheckedCells((previous) => {
+          const updated = { ...previous };
+          delete updated[currentKey];
+          return updated;
+        });
+
         const nextCell = activeCells[currentIndex + 1];
 
         if (nextCell) {
@@ -136,6 +183,12 @@ export default function CrosswordPage() {
 
         if (entries[currentKey]) {
           setEntries((previous) => {
+            const updated = { ...previous };
+            delete updated[currentKey];
+            return updated;
+          });
+
+          setCheckedCells((previous) => {
             const updated = { ...previous };
             delete updated[currentKey];
             return updated;
@@ -390,13 +443,11 @@ export default function CrosswordPage() {
                           transition-colors duration-100
                           ${
                             isBlack
-                              ? "bg-[#292929]"
-                              : isSelected
-                                ? checkedCells[`${rowIndex}-${colIndex}`]
-                                  ? "bg-red-200"
-                                  : "bg-[#ec7c878]"
-                                : checkedCells[`${rowIndex}-${colIndex}`]
-                                  ? "bg-red-100"
+                              ? "bg-[#292929] cursor-default"
+                              : checkedCells[`${rowIndex}-${colIndex}`]
+                                ? "bg-red-500 text-white"
+                                : isSelected
+                                  ? "bg-[#e7c878]"
                                   : isActive
                                     ? "bg-[#f2e5bd]"
                                     : "bg-white"
@@ -404,7 +455,7 @@ export default function CrosswordPage() {
                           ${
                             !isBlack
                               ? "hover:bg-[#eee1bd] cursor-pointer"
-                              : "cursor-default"
+                              : ""
                           }
                         `}
                         aria-label={
