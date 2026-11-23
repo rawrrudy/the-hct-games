@@ -40,6 +40,9 @@ export default function CrosswordPage() {
     Record<string, boolean>
   >({});
   const [progressLoaded, setProgressLoaded] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [completionTime, setCompletionTime] = useState<number | null>(null);
+  const [startTime, setStartTime] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadPuzzle() {
@@ -349,6 +352,31 @@ export default function CrosswordPage() {
       setActiveClue(matching);
     }
   }
+
+  useEffect(() => {
+    if (!puzzle || !progressLoaded || isCompleted) return;
+
+    const allCorrect = puzzle.grid.every((row, rowIndex) =>
+      row.every((cell, colIndex) => {
+        if (cell === "#") return true;
+
+        const key = `${rowIndex}-${colIndex}`;
+        const enteredLetter = entries[key];
+
+        return enteredLetter === cell;
+      })
+    );
+
+    if (allCorrect) {
+      const endTime = Date.now();
+
+      setIsCompleted(true);
+
+      if (startTime !== null) {
+        setCompletionTime(Math.floor((endTime - startTime) / 1000));
+      }
+    }
+  }, [puzzle, entries, progressLoaded, isCompleted, startTime]);
 
   if (loading) {
     return (
