@@ -161,6 +161,8 @@ export default function CrosswordPage() {
       if (/^[a-zA-Z]$/.test(event.key)) {
         event.preventDefault();
 
+        setStartTime((previous) => previous ?? Date.now());
+
         setEntries((previous) => ({
           ...previous,
           [currentKey]: event.key.toUpperCase(),
@@ -382,6 +384,52 @@ export default function CrosswordPage() {
     return (
       <main className="min-h-screen bg-[#faf9f6] flex items-center justify-center">
         <p className="text-sm text-[#777]">Loading crossword...</p>
+      </main>
+    );
+  }
+
+  if (isCompleted) {
+    const minutes = Math.floor((completionTime ?? 0) / 60);
+    const seconds = (completionTime ?? 0) % 60;
+
+    return (
+      <main className="min-h-screen bg-[#faf9f6] flex items-center justify-center px-5">
+        <div className="max-w-full text-center bg-white border border-[#e8e5df] rounded-2xl p-10 shadow-sm">
+          <div className="text-5xl mb-6">YAYAYAYAYAYAYAY</div>
+
+          <p className="text-xs uppercase tracking-[0.2em] text-[#a58b4c] mb-3">
+            Crossword solved!
+          </p>
+
+          <h1 className="text-3xl font-semibold tracking-tight mb-3">
+            Congratulations!
+          </h1>
+
+          <p className="text-sm text-[#888] mb-8">
+            You've SUCCESSFULLY completed the crossword!! 
+          </p>
+
+          <div className="bg-[#faf9f6] rounded-xl p-5 mb-8">
+            <p className="text-xs uppercase tracking-widest text-[#999] mb-2">
+              Your completion time
+            </p>
+
+            <p className="text-3xl font-semibold tabular-nums">
+              {minutes}:{String(seconds).padStart(2, "0")}
+            </p>
+          </div>
+
+          <p className="text-sm text-[#888] mb-7">
+            {puzzle?.title}
+          </p>
+
+          <a
+            href="/"
+            className="inline-block w-full rounded-lg bg-[#292929] text-white py-3 text-sm font-medium hover:bg-[#444] transition"
+          >
+            Back to HCT Games
+          </a>
+        </div>
       </main>
     );
   }
