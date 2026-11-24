@@ -60,6 +60,31 @@ export default function CrosswordPage() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
+  const availableDates = useMemo(
+    () => new Set(archive.map((puzzle) => puzzle.date)),
+    [archive]
+  );
+
+  const calendarYear = calendarMonth.getFullYear();
+  const calendarMonthIndex = calendarMonth.getMonth();
+
+  const daysInMonth = new Date(
+    calendarYear,
+    calendarMonthIndex + 1,
+    0
+  ).getDate();
+
+  const firstDayOfMonth = new Date(
+    calendarYear,
+    calendarMonthIndex,
+    1
+  ).getDay();
+
+  const monthName = calendarMonth.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+
   async function loadPuzzle(date?: string) {
     setLoading(true);
     setError("");
@@ -530,8 +555,108 @@ export default function CrosswordPage() {
                 {puzzle.date}
               </p>
             </div>
+
+            <button
+              onClick={() => setArchiveOpen((previous) => !previous)}
+              className="shrink-0 px-4 py-2 border border-[#e8e5df] rounded-lg text-sm font-medium hover:bg-[#f0eee8] transition"
+            >
+              {archiveOpen ? "Close Archive" : "Puzzle Archive"}
+            </button>
           </div>
         </header>
+
+        {archiveOpen && (
+          <section className="mb-8 p-5 sm:p-6 bg-white border border-[#e8e5df] rounded-xl">
+            <div className="flex items-center justify-between mb-6">
+              <button
+                onClick={() =>
+                  setCalendarMonth(
+                    new Date(calendarYear, calendarMonthIndex - 1, 1)
+                  )
+                }
+                className="px-3 py-2 rounded-md hover:bg-[#f0eee8] transition"
+                aria-label="Previous month"
+              >
+                ←
+              </button>
+
+              <h2 className="text-lg font-semibold">
+                {monthName}
+              </h2>
+
+              <button
+                onClick={() =>
+                  setCalendarMonth(
+                    new Date(calendarYear, calendarMonthIndex + 1, 1)
+                  )
+                }
+                className="px-3 py-2 rounded-md hover:bg-[#f0eee8] transition"
+                aria-label="Next month"
+              >
+                →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2 mb-3 text-center">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                (day) => (
+                  <div
+                    key={day}
+                    className="text-xs text-[#999] font-medium"
+                  >
+                    {day}
+                  </div>
+                )
+              )}
+            </div>
+
+            <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: firstDayOfMonth }).map((_, index) => (
+                <div key={`empty-${index}`} />
+              ))}
+
+              {Array.from({ length: daysInMonth }, (_, index) => index + 1).map(
+                (day) => {
+                  const date = `${calendarYear}-${String(
+                    calendarMonthIndex + 1
+                  ).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+                  const hasPuzzle = availableDates.has(date);
+                  const isSelected = puzzle.date === date;
+
+                  return (
+                    <button
+                      key={date}
+                      disabled={!hasPuzzle}
+                      onClick={() => {
+                        loadPuzzle(date);
+                        setArchiveOpen(false);
+                      }}
+                      className={`
+                        aspect-square rounded-lg text-sm font-medium
+                        transition
+                        ${
+                          isSelected
+                            ? "bg-[#292929] text-white"
+                            : hasPuzzle
+                              ? "bg-[#eee8d8] text-[#252525] hover:bg-[#e7c878]"
+                              : "text-[#ccc] cursor-not-allowed"
+                        }
+                      `}
+                    >
+                      {day}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 mt-5 text-xs text-[#999]">
+              <span className="w-3 h-3 rounded-sm bg-[#eee8d8]" />
+              Available puzzles
+            </div>
+          </section>
+        )}
 
         <div className="border-t border-[#e8e5df] mb-8" />
 
