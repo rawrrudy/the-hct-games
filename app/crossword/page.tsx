@@ -14,6 +14,18 @@ interface CrosswordClue {
   answer: string;
 }
 
+interface CrosswordArchiveEntry {
+  date: string;
+  file: string;
+  title: string;
+  available: boolean;
+}
+
+interface CrosswordArchiveResponse {
+  success: boolean;
+  puzzles: CrosswordArchiveEntry[];
+}
+
 interface CrosswordPuzzle {
   success: boolean;
   title: string;
@@ -44,40 +56,84 @@ export default function CrosswordPage() {
   const [completionTime, setCompletionTime] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
 
+  const [archive, setArchive] = useState<CrosswordArchiveEntry[]>([]);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+
+  async function loadPuzzle(date?: string) {
+    setLoading(true);
+    setError("");
+
+    setProgressLoaded(false);
+    setEntries({});
+    setCheckedCells({});
+    setIsCompleted(false);
+    setCompletionTime(null);
+    setStartTime(null);
+    setActiveClue(null);
+    setSelectedCell(null);
+
+    try {
+      const url = date
+        ? `/api/crossword?date=${date}`
+        : "/api/crossword";
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error("Failed to load crossword puzzle.");
+      }
+
+      const data: CrosswordPuzzle = await response.json();
+
+      if (!data.success) {
+        throw new Error("The crossword puzzle could not be loaded.");
+      }
+
+      setPuzzle(data);
+
+      if (data.across.length > 0) {
+        setActiveClue(data.across[0]);
+        setSelectedCell({
+          row: data.across[0].row,
+          col: data.across[0].col,
+        });
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Something went wrong."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    async function loadPuzzle() {
+    loadPuzzle();
+  }, []);
+
+  useEffect(() => {
+    async function loadArchive() {
       try {
-        const response = await fetch("/api/crossword/test");
+        const response = await fetch("/api/crossword/archive");
 
         if (!response.ok) {
-          throw new Error("Failed to load crossword puzzle.");
+          throw new Error("Failed to load crossword archive.");
         }
 
-        const data: CrosswordPuzzle = await response.json();
+        const data: CrosswordArchiveResponse = await response.json();
 
         if (!data.success) {
-          throw new Error("The crossword puzzle could not be loaded.");
+          throw new Error("Could not load crossword archive.");
         }
 
-        setPuzzle(data);
-
-        if (data.across.length > 0) {
-          setActiveClue(data.across[0]);
-          setSelectedCell({
-            row: data.across[0].row,
-            col: data.across[0].col,
-          });
-        }
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Something went wrong."
-        );
-      } finally {
-        setLoading(false);
+        setArchive(data.puzzles);
+      } catch (error) {
+        console.error("Crossword archive error:", error);
       }
     }
 
-    loadPuzzle();
+    loadArchive();
   }, []);
 
   useEffect(() => {
@@ -113,7 +169,7 @@ export default function CrosswordPage() {
     if (!puzzle || !progressLoaded) return;
 
     localStorage.setItem(
-      `hct-sudoku-${puzzle.date}`,
+      `hct-crossword-${puzzle.date}`,
       JSON.stringify({
         entries,
       })
